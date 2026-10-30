@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { WorkspaceData } from '../../core/types/workspace';
+import { useUserIdentity } from './useUserIdentity';
 
 export interface WorkspaceMeta {
   id: string;
@@ -7,17 +8,30 @@ export interface WorkspaceMeta {
   savedAt: string;
 }
 
-export function useWorkspaces() {
+export function useWorkspaces(explicitUserId?: string | null) {
+  const { userId: contextUserId } = useUserIdentity();
+  const effectiveUserId = explicitUserId !== undefined ? explicitUserId : contextUserId;
+
   const [workspaces, setWorkspaces] = useState<WorkspaceMeta[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<WorkspaceData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    return {
+      'X-User-Id': effectiveUserId || '',
+    };
+  }, [effectiveUserId]);
+
   const fetchWorkspaces = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/workspaces');
+      const res = await fetch('/api/workspaces', {
+        headers: {
+          ...authHeaders,
+        },
+      });
       if (!res.ok) {
         throw new Error(`Failed to load workspaces: ${res.statusText}`);
       }
@@ -30,13 +44,17 @@ export function useWorkspaces() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authHeaders]);
 
   const loadWorkspace = useCallback(async (id: string): Promise<WorkspaceData | null> => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`);
+      const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
+        headers: {
+          ...authHeaders,
+        },
+      });
       if (!res.ok) {
         throw new Error(`Failed to load workspace: ${res.statusText}`);
       }
@@ -52,14 +70,17 @@ export function useWorkspaces() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authHeaders]);
 
   const saveWorkspace = useCallback(async (data: WorkspaceData): Promise<boolean> => {
     setError(null);
     try {
       const res = await fetch('/api/workspaces', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
         body: JSON.stringify(data),
       });
       if (!res.ok) {
@@ -76,13 +97,16 @@ export function useWorkspaces() {
       setError(err instanceof Error ? err.message : String(err));
       return false;
     }
-  }, [fetchWorkspaces]);
+  }, [authHeaders, fetchWorkspaces]);
 
   const deleteWorkspace = useCallback(async (id: string): Promise<boolean> => {
     setError(null);
     try {
       const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}`, {
         method: 'DELETE',
+        headers: {
+          ...authHeaders,
+        },
       });
       if (!res.ok) {
         throw new Error(`Failed to delete workspace: ${res.statusText}`);
@@ -96,14 +120,17 @@ export function useWorkspaces() {
       setError(err instanceof Error ? err.message : String(err));
       return false;
     }
-  }, [currentWorkspace, fetchWorkspaces]);
+  }, [authHeaders, currentWorkspace, fetchWorkspaces]);
 
   const renameWorkspace = useCallback(async (id: string, newName: string): Promise<boolean> => {
     setError(null);
     try {
       const res = await fetch(`/api/workspaces/${encodeURIComponent(id)}/rename`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
         body: JSON.stringify({ name: newName }),
       });
       if (!res.ok) {
@@ -118,7 +145,7 @@ export function useWorkspaces() {
       setError(err instanceof Error ? err.message : String(err));
       return false;
     }
-  }, [currentWorkspace, fetchWorkspaces]);
+  }, [authHeaders, currentWorkspace, fetchWorkspaces]);
 
   useEffect(() => {
     fetchWorkspaces();

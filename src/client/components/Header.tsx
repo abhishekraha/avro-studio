@@ -12,6 +12,7 @@ import {
   RefreshCw,
   CheckCircle2,
   Code2,
+  User,
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -32,6 +33,8 @@ export interface HeaderProps {
   onOpenImport: () => void;
   onNewWorkspace: () => void;
   onOpenWorkspaceModal?: () => void;
+  userId?: string | null;
+  onOpenUserModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -51,6 +54,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRecon,
   onOpenImport,
   onNewWorkspace,
+  userId,
+  onOpenUserModal,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [titleInput, setTitleInput] = React.useState(workspaceName);
@@ -219,6 +224,17 @@ export const Header: React.FC<HeaderProps> = ({
           <Save className="w-3.5 h-3.5" />
           <span>Save</span>
         </button>
+
+        {onOpenUserModal && (
+          <button
+            onClick={onOpenUserModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700 ml-1"
+            title={userId ? `Signed in as ${userId} - Click to switch` : 'Set user identity'}
+          >
+            <User className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="max-w-[100px] truncate">{userId || 'User'}</span>
+          </button>
+        )}
       </div>
     </header>
   );

@@ -7,8 +7,10 @@ import { ReconciliationModal } from './components/Modals/ReconciliationModal';
 import { LinkagesExportModal } from './components/Modals/LinkagesExportModal';
 import { ImportModal } from './components/Modals/ImportModal';
 import { AvdlPreviewModal } from './components/Modals/AvdlPreviewModal';
+import { UserModal } from './components/Modals/UserModal';
 import { useSchemaState } from './hooks/useSchemaState';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { useUserIdentity } from './hooks/useUserIdentity';
 import { computeDiff } from '../core/utils/schemaDiff';
 import { serializeAvdl } from '../core/serializer/avdlSerializer';
 import type { AvroProtocol } from '../core/types/schema';
@@ -54,7 +56,9 @@ export function App() {
   const [isLinkagesModalOpen, setIsLinkagesModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAvdlPreviewOpen, setIsAvdlPreviewOpen] = useState(false);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
 
+  const { userId, setUserId, isInitialized } = useUserIdentity();
   const { saveWorkspace, loadWorkspace } = useWorkspaces();
 
   // Autosave handler callback
@@ -159,6 +163,8 @@ export function App() {
         onOpenRecon={() => setIsReconModalOpen(true)}
         onOpenImport={() => setIsImportModalOpen(true)}
         onNewWorkspace={handleNewWorkspace}
+        userId={userId}
+        onOpenUserModal={() => setIsUserModalOpen(true)}
       />
 
       {/* Diff Stats Banner */}
@@ -260,6 +266,17 @@ export function App() {
         onClose={() => setIsAvdlPreviewOpen(false)}
         originalProtocol={schemaState.original}
         editedProtocol={schemaState.edited}
+      />
+
+      {/* User Identity Modal */}
+      <UserModal
+        isOpen={isInitialized && (!userId || isUserModalOpen)}
+        currentUserId={userId}
+        onSave={(newId) => {
+          setUserId(newId);
+          setIsUserModalOpen(false);
+        }}
+        onClose={() => setIsUserModalOpen(false)}
       />
     </div>
   );
