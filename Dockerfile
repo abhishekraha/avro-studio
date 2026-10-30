@@ -33,12 +33,14 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV AVRO_DATA_DIR=/data
 
-# Install production dependencies only
+# Install production dependencies and tsx for TypeScript server execution
 COPY package*.json ./
-RUN npm ci --omit=dev && apk del python3 make g++
+RUN npm ci --omit=dev && npm install tsx && apk del python3 make g++
 
-# Copy compiled artifacts from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy compiled client artifacts from builder stage and src for server execution
+COPY --from=builder /app/dist/client ./dist/client
+COPY src ./src
+COPY tsconfig*.json ./
 
 # Create persistent data directory and grant permissions to node user
 RUN mkdir -p /data && chown -R node:node /app /data
@@ -49,5 +51,5 @@ USER node
 # Expose standard service port
 EXPOSE 3000
 
-# Start server
-CMD ["node", "dist/server/index.js"]
+# Start server via local tsx
+CMD ["./node_modules/.bin/tsx", "src/server/index.ts"]

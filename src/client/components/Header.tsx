@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   CheckCircle2,
+  Code2,
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -26,6 +27,7 @@ export interface HeaderProps {
   onExportAvdl: () => void;
   onExportBigQuery: () => void;
   onExportLinkages: () => void;
+  onOpenAvdlPreview: () => void;
   onOpenRecon: () => void;
   onOpenImport: () => void;
   onNewWorkspace: () => void;
@@ -45,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   onExportAvdl,
   onExportBigQuery,
   onExportLinkages,
+  onOpenAvdlPreview,
   onOpenRecon,
   onOpenImport,
   onNewWorkspace,
@@ -161,6 +164,15 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Plus className="w-3.5 h-3.5 text-emerald-400" />
           <span>New</span>
+        </button>
+
+        <button
+          onClick={onOpenAvdlPreview}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
+          title="Preview side-by-side original and restructured AVDL"
+        >
+          <Code2 className="w-3.5 h-3.5 text-blue-400" />
+          <span>Preview AVDL</span>
         </button>
 
         <button

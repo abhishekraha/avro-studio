@@ -6,6 +6,7 @@ import { BigQueryExportModal } from './components/Modals/BigQueryExportModal';
 import { ReconciliationModal } from './components/Modals/ReconciliationModal';
 import { LinkagesExportModal } from './components/Modals/LinkagesExportModal';
 import { ImportModal } from './components/Modals/ImportModal';
+import { AvdlPreviewModal } from './components/Modals/AvdlPreviewModal';
 import { useSchemaState } from './hooks/useSchemaState';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { computeDiff } from '../core/utils/schemaDiff';
@@ -52,6 +53,7 @@ export function App() {
   const [isReconModalOpen, setIsReconModalOpen] = useState(false);
   const [isLinkagesModalOpen, setIsLinkagesModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAvdlPreviewOpen, setIsAvdlPreviewOpen] = useState(false);
 
   const { saveWorkspace, loadWorkspace } = useWorkspaces();
 
@@ -151,6 +153,7 @@ export function App() {
         onRedo={schemaState.redo}
         onSave={handleExplicitSave}
         onExportAvdl={handleExportAvdl}
+        onOpenAvdlPreview={() => setIsAvdlPreviewOpen(true)}
         onExportBigQuery={() => setIsBqModalOpen(true)}
         onExportLinkages={() => setIsLinkagesModalOpen(true)}
         onOpenRecon={() => setIsReconModalOpen(true)}
@@ -249,6 +252,14 @@ export function App() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImportProtocol}
+      />
+
+      {/* Side-by-Side AVDL Preview Modal */}
+      <AvdlPreviewModal
+        isOpen={isAvdlPreviewOpen}
+        onClose={() => setIsAvdlPreviewOpen(false)}
+        originalProtocol={schemaState.original}
+        editedProtocol={schemaState.edited}
       />
     </div>
   );
