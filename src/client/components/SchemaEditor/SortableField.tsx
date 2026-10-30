@@ -15,6 +15,8 @@ export interface SortableFieldProps {
   linkedPartner?: LinkedPartnerInfo;
   isLinkingActive?: boolean;
   isSelfLinking?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
   onRename: (newName: string) => void;
   onUpdateType: (newType: AvroSchemaType) => void;
   onRemove: () => void;
@@ -32,6 +34,8 @@ export const SortableField: React.FC<SortableFieldProps> = ({
   linkedPartner,
   isLinkingActive,
   isSelfLinking,
+  isSelected,
+  onSelect,
   onRename,
   onUpdateType,
   onRemove,
@@ -133,9 +137,12 @@ export const SortableField: React.FC<SortableFieldProps> = ({
       ref={setNodeRef}
       id={`field-edit-${field.id}`}
       style={style}
-      className={`group px-3 py-2 flex items-center justify-between text-xs bg-gray-900 border border-gray-800/80 rounded-lg hover:border-gray-700 transition shadow-sm ${
-        isDragging ? 'shadow-lg border-indigo-500' : ''
-      }`}
+      onClick={onSelect}
+      className={`group px-3 py-2 flex items-center justify-between text-xs bg-gray-900 border transition shadow-sm cursor-pointer ${
+        isSelected
+          ? 'border-emerald-400 bg-gray-850 ring-1 ring-emerald-400/80 shadow-md'
+          : 'border-gray-800/80 hover:border-gray-700'
+      } rounded-lg ${isDragging ? 'shadow-lg border-indigo-500' : ''}`}
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
         {/* Drag Handle */}

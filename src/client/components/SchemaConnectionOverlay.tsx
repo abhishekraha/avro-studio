@@ -143,20 +143,30 @@ export const SchemaConnectionOverlay: React.FC<SchemaConnectionOverlayProps> = (
               d={p.d}
               fill="none"
               stroke="transparent"
-              strokeWidth="14"
+              strokeWidth="16"
               onClick={() => onSelectConnection?.(isSelected ? null : p.id)}
             />
 
-            {/* Glowing outline when selected */}
+            {/* Glowing prominent blur aura when selected */}
             {isSelected && (
-              <path
-                d={p.d}
-                fill="none"
-                stroke="#38bdf8"
-                strokeWidth="5"
-                filter="url(#glow)"
-                opacity="0.8"
-              />
+              <>
+                <path
+                  d={p.d}
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth="8"
+                  filter="url(#glow)"
+                  opacity="0.9"
+                />
+                <path
+                  d={p.d}
+                  fill="none"
+                  stroke="#67e8f9"
+                  strokeWidth="5"
+                  filter="url(#glow)"
+                  opacity="1"
+                />
+              </>
             )}
 
             {/* Visible connector line */}
@@ -164,8 +174,8 @@ export const SchemaConnectionOverlay: React.FC<SchemaConnectionOverlayProps> = (
               d={p.d}
               fill="none"
               stroke={isSelected ? 'url(#lineGradActive)' : 'url(#lineGrad)'}
-              strokeWidth={isSelected ? '2.5' : '1.2'}
-              strokeDasharray={p.isManual ? '4 3' : undefined}
+              strokeWidth={isSelected ? '3.5' : '1.2'}
+              strokeDasharray={p.isManual && !isSelected ? '4 3' : undefined}
               className="transition-all duration-200"
               onClick={() => onSelectConnection?.(isSelected ? null : p.id)}
             />
@@ -174,15 +184,15 @@ export const SchemaConnectionOverlay: React.FC<SchemaConnectionOverlayProps> = (
             <circle
               cx={p.origPoint.x}
               cy={p.origPoint.y}
-              r={isSelected ? 3.5 : 2}
-              fill={isSelected ? '#818cf8' : '#6366f1'}
+              r={isSelected ? 5 : 2}
+              fill={isSelected ? '#a5b4fc' : '#6366f1'}
               opacity={isSelected ? 1 : 0.6}
             />
             <circle
               cx={p.editPoint.x}
               cy={p.editPoint.y}
-              r={isSelected ? 3.5 : 2}
-              fill={isSelected ? '#34d399' : '#10b981'}
+              r={isSelected ? 5 : 2}
+              fill={isSelected ? '#6ee7b7' : '#10b981'}
               opacity={isSelected ? 1 : 0.6}
             />
           </g>

@@ -96,6 +96,7 @@ export function App() {
 
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [isSaving, setIsSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<'compare' | 'create'>('compare');
 
   // Modals state
   const [isBqModalOpen, setIsBqModalOpen] = useState(false);
@@ -484,6 +485,33 @@ export function App() {
     return list;
   }, [activeContract?.original, schemaState.original, schemaState.edited, activeContract?.manualLinks]);
 
+  // Click on a field box highlights its connection line and makes it glow
+  const handleSelectField = useCallback(
+    (fieldId: string | null) => {
+      if (!fieldId) {
+        setSelectedConnectionId(null);
+        return;
+      }
+      // Find matching connection where this field is either original or edited
+      const matchedConn = connections.find(
+        (c) => c.originalFieldId === fieldId || c.editedFieldId === fieldId
+      );
+      if (matchedConn) {
+        setSelectedConnectionId(`${matchedConn.originalFieldId}::${matchedConn.editedFieldId}`);
+      } else {
+        setSelectedConnectionId(null);
+      }
+    },
+    [connections]
+  );
+
+  // Active selected field ID for highlighting boxes
+  const activeSelectedFieldId = useMemo(() => {
+    if (!selectedConnectionId) return null;
+    const parts = selectedConnectionId.split('::');
+    return parts[0] || null;
+  }, [selectedConnectionId]);
+
   // Linking actions
   const handleStartLinking = useCallback((fieldId: string, isOriginal: boolean) => {
     setLinkingState((prev) => {
@@ -851,15 +879,34 @@ export function App() {
   };
 
   const handleNewWorkspace = () => {
-    const newWs = createDefaultWorkspace(`ws-${Date.now()}`, 'Untitled Workspace', userId || undefined);
-    newWs.contracts[0].name = 'OrderService.avdl';
-    newWs.contracts[0].original = DEFAULT_PROTOCOL;
-    newWs.contracts[0].edited = DEFAULT_PROTOCOL;
-    newWs.original = DEFAULT_PROTOCOL;
-    newWs.edited = DEFAULT_PROTOCOL;
+    const blankProtocol: AvroProtocol = {
+      protocol: 'NewServiceProtocol',
+      namespace: 'com.example.schema',
+      schemaVersion: '1.0.0',
+      types: [
+        {
+          type: 'record',
+          name: 'NewRecord',
+          doc: 'Initial schema record',
+          fields: [
+            { id: `f-${Date.now()}-1`, name: 'id', type: 'string', doc: 'Primary identifier' },
+          ],
+        },
+      ],
+    };
+
+    const newWs = createDefaultWorkspace(`ws-${Date.now()}`, 'New Schema Project', userId || undefined);
+    newWs.contracts[0].name = 'NewService.avdl';
+    newWs.contracts[0].original = null; // Clean slate: no original compare baseline in create-new
+    newWs.contracts[0].edited = blankProtocol;
+    newWs.contracts[0].manualLinks = [];
+    newWs.original = null;
+    newWs.edited = blankProtocol;
+    newWs.manualLinks = [];
     setWorkspace(newWs);
     setLastSavedAt(undefined);
-    schemaState.setProtocol(DEFAULT_PROTOCOL);
+    schemaState.setProtocol(blankProtocol);
+    setViewMode('create');
   };
 
   return (
@@ -883,6 +930,8 @@ export function App() {
         onOpenRecon={() => setIsReconModalOpen(true)}
         onOpenImport={() => setIsImportModalOpen(true)}
         onNewWorkspace={handleNewWorkspace}
+        viewMode={viewMode}
+        onToggleViewMode={setViewMode}
         userId={userId}
         onOpenUserModal={() => setIsUserModalOpen(true)}
         schemaVersion={schemaState.edited?.schemaVersion}
@@ -930,50 +979,64 @@ export function App() {
         </div>
       </div>
 
-      {/* Dual-Pane Studio Workspace wrapped in top-level DndContext */}
+      {/* Dual-Pane or Full Create Workspace wrapped in top-level DndContext */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <main ref={studioContainerRef} className="flex-1 flex overflow-hidden relative">
-          {/* Connecting lines overlay */}
-          <SchemaConnectionOverlay
-            connections={connections}
-            selectedConnectionId={selectedConnectionId}
-            onSelectConnection={setSelectedConnectionId}
-            containerRef={studioContainerRef}
-          />
-
-          {/* Left Pane: Read-only Original Schema */}
-          <section className="w-1/2 border-r border-gray-800 bg-gray-950/40 flex flex-col overflow-hidden">
-            <SchemaViewer
-              protocol={schemaState.original}
-              annotations={diffResult.originalAnnotations}
-              recordLinks={activeContract?.recordLinks}
-              partnerFieldsMap={origPartnerMap}
-              availableEditedRecordNames={
-                schemaState.edited?.types
-                  ? schemaState.edited.types.filter(isRecordType).map((r) => r.name)
-                  : []
-              }
-              linkingFieldId={linkingState?.fieldId}
-              onStartLinking={handleStartLinking}
-              onLinkField={handleLinkField}
-              onUnlink={handleUnlink}
-              onCopyRecord={handleCopyRecord}
-              onLinkRecord={handleLinkRecord}
-              onUnlinkRecord={handleUnlinkRecord}
+          {/* Connecting lines overlay (only active in Compare & Edit mode) */}
+          {viewMode === 'compare' && (
+            <SchemaConnectionOverlay
+              connections={connections}
+              selectedConnectionId={selectedConnectionId}
+              onSelectConnection={setSelectedConnectionId}
+              containerRef={studioContainerRef}
             />
-          </section>
+          )}
 
-          {/* Right Pane: Interactive Drag-and-Drop Editor */}
-          <section className="w-1/2 bg-gray-950 flex flex-col overflow-hidden">
+          {/* Left Pane: Read-only Original Schema (Compare mode only) */}
+          {viewMode === 'compare' && (
+            <section className="w-1/2 border-r border-gray-800 bg-gray-950/40 flex flex-col overflow-hidden">
+              <SchemaViewer
+                protocol={schemaState.original}
+                annotations={diffResult.originalAnnotations}
+                recordLinks={activeContract?.recordLinks}
+                partnerFieldsMap={origPartnerMap}
+                availableEditedRecordNames={
+                  schemaState.edited?.types
+                    ? schemaState.edited.types.filter(isRecordType).map((r) => r.name)
+                    : []
+                }
+                linkingFieldId={linkingState?.fieldId}
+                selectedFieldId={activeSelectedFieldId}
+                onSelectField={handleSelectField}
+                onStartLinking={handleStartLinking}
+                onLinkField={handleLinkField}
+                onUnlink={handleUnlink}
+                onCopyRecord={handleCopyRecord}
+                onLinkRecord={handleLinkRecord}
+                onUnlinkRecord={handleUnlinkRecord}
+              />
+            </section>
+          )}
+
+          {/* Right/Full Pane: Interactive Drag-and-Drop Editor */}
+          <section
+            className={`${
+              viewMode === 'create' ? 'w-full max-w-5xl mx-auto border-x border-gray-800 shadow-2xl' : 'w-1/2'
+            } bg-gray-950 flex flex-col overflow-hidden`}
+          >
             <SchemaEditor
               protocol={schemaState.edited}
               workspaceName={workspace.name}
               onRenameWorkspace={handleRenameWorkspace}
+              onUpdateProtocolName={schemaState.setProtocolName}
+              onUpdateProtocolNamespace={schemaState.setProtocolNamespace}
               schemaVersion={schemaState.edited?.schemaVersion || '1.0.0'}
               onUpdateSchemaVersion={schemaState.setSchemaVersion}
-              annotations={diffResult.editedAnnotations}
-              partnerFieldsMap={editedPartnerMap}
-              linkingFieldId={linkingState?.fieldId}
+              annotations={viewMode === 'compare' ? diffResult.editedAnnotations : undefined}
+              partnerFieldsMap={viewMode === 'compare' ? editedPartnerMap : undefined}
+              linkingFieldId={viewMode === 'compare' ? linkingState?.fieldId : undefined}
+              selectedFieldId={activeSelectedFieldId}
+              onSelectField={handleSelectField}
               onStartLinking={handleStartLinking}
               onLinkField={handleLinkField}
               onUnlink={handleUnlink}

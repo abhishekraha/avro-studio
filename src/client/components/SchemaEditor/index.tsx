@@ -15,11 +15,15 @@ export interface SchemaEditorProps {
   protocol: AvroProtocol | null;
   workspaceName?: string;
   onRenameWorkspace?: (name: string) => void;
+  onUpdateProtocolName?: (name: string) => void;
+  onUpdateProtocolNamespace?: (namespace: string) => void;
   schemaVersion?: string;
   onUpdateSchemaVersion?: (version: string) => void;
   annotations?: Map<string, LinkType | 'unchanged'>;
   partnerFieldsMap?: Map<string, LinkedPartnerInfo>; // editedFieldId -> orig partner info
   linkingFieldId?: string | null;
+  selectedFieldId?: string | null;
+  onSelectField?: (fieldId: string | null) => void;
   onStartLinking?: (fieldId: string, isOriginal: boolean) => void;
   onLinkField?: (targetFieldId: string) => void;
   onUnlink?: (fieldId: string) => void;
@@ -41,6 +45,8 @@ interface DroppableRecordCardProps {
   annotations?: Map<string, LinkType | 'unchanged'>;
   partnerFieldsMap?: Map<string, LinkedPartnerInfo>;
   linkingFieldId?: string | null;
+  selectedFieldId?: string | null;
+  onSelectField?: (fieldId: string | null) => void;
   addingFieldRecord: string | null;
   newFieldName: string;
   newFieldType: AvroSchemaType;
@@ -65,6 +71,8 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
   annotations,
   partnerFieldsMap,
   linkingFieldId,
+  selectedFieldId,
+  onSelectField,
   addingFieldRecord,
   newFieldName,
   newFieldType,
@@ -205,6 +213,8 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
                 linkedPartner={linkedPartner}
                 isLinkingActive={isLinkingActive}
                 isSelfLinking={isSelfLinking}
+                isSelected={selectedFieldId === field.id}
+                onSelect={() => onSelectField?.(selectedFieldId === field.id ? null : field.id)}
                 onRename={(newName) => onRenameField(record.name, field.id, newName, record.namespace)}
                 onUpdateType={(newType) =>
                   onUpdateFieldType(record.name, field.id, newType, record.namespace)
@@ -305,11 +315,15 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   protocol,
   workspaceName,
   onRenameWorkspace,
+  onUpdateProtocolName,
+  onUpdateProtocolNamespace,
   schemaVersion = '1.0.0',
   onUpdateSchemaVersion,
   annotations,
   partnerFieldsMap,
   linkingFieldId,
+  selectedFieldId,
+  onSelectField,
   onStartLinking,
   onLinkField,
   onUnlink,
@@ -334,6 +348,10 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   const [versionInput, setVersionInput] = useState(schemaVersion);
   const [isEditingWsName, setIsEditingWsName] = useState(false);
   const [wsNameInput, setWsNameInput] = useState(workspaceName || '');
+  const [isEditingProtocolName, setIsEditingProtocolName] = useState(false);
+  const [protocolNameInput, setProtocolNameInput] = useState(protocol?.protocol || '');
+  const [isEditingNamespace, setIsEditingNamespace] = useState(false);
+  const [namespaceInput, setNamespaceInput] = useState(protocol?.namespace || '');
 
   React.useEffect(() => {
     setVersionInput(schemaVersion);
@@ -342,6 +360,11 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   React.useEffect(() => {
     setWsNameInput(workspaceName || '');
   }, [workspaceName]);
+
+  React.useEffect(() => {
+    setProtocolNameInput(protocol?.protocol || '');
+    setNamespaceInput(protocol?.namespace || '');
+  }, [protocol?.protocol, protocol?.namespace]);
 
   const bumpVersion = (type: 'major' | 'minor' | 'patch') => {
     const semverRegex = /^v?(\d+)\.(\d+)\.(\d+)(.*)$/;
@@ -382,6 +405,24 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
       onRenameWorkspace(wsNameInput.trim());
     } else {
       setWsNameInput(workspaceName || '');
+    }
+  };
+
+  const handleProtocolNameSubmit = () => {
+    setIsEditingProtocolName(false);
+    if (protocolNameInput.trim() && protocolNameInput !== protocol?.protocol && onUpdateProtocolName) {
+      onUpdateProtocolName(protocolNameInput.trim());
+    } else {
+      setProtocolNameInput(protocol?.protocol || '');
+    }
+  };
+
+  const handleNamespaceSubmit = () => {
+    setIsEditingNamespace(false);
+    if (namespaceInput !== protocol?.namespace && onUpdateProtocolNamespace) {
+      onUpdateProtocolNamespace(namespaceInput.trim());
+    } else {
+      setNamespaceInput(protocol?.namespace || '');
     }
   };
 
@@ -453,7 +494,60 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
             )}
 
             <span className="text-gray-600">/</span>
-            <span className="text-sm font-mono text-gray-300 font-medium">{protocol.protocol}</span>
+            {isEditingProtocolName ? (
+              <input
+                type="text"
+                className="bg-gray-850 text-indigo-300 text-sm font-mono font-semibold px-2 py-0.5 rounded border border-indigo-500 focus:outline-none"
+                value={protocolNameInput}
+                onChange={(e) => setProtocolNameInput(e.target.value)}
+                onBlur={handleProtocolNameSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleProtocolNameSubmit();
+                  if (e.key === 'Escape') {
+                    setProtocolNameInput(protocol.protocol);
+                    setIsEditingProtocolName(false);
+                  }
+                }}
+                autoFocus
+              />
+            ) : (
+              <button
+                onClick={() => setIsEditingProtocolName(true)}
+                className="text-sm font-mono text-gray-300 hover:text-white px-1 py-0.5 rounded hover:bg-gray-800/60 transition"
+                title="Click to rename protocol"
+              >
+                {protocol.protocol}
+              </button>
+            )}
+
+            {/* Editable Protocol Namespace */}
+            <span className="text-gray-600">@</span>
+            {isEditingNamespace ? (
+              <input
+                type="text"
+                placeholder="namespace..."
+                className="bg-gray-850 text-gray-300 text-xs font-mono px-2 py-0.5 rounded border border-gray-600 focus:outline-none w-44"
+                value={namespaceInput}
+                onChange={(e) => setNamespaceInput(e.target.value)}
+                onBlur={handleNamespaceSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleNamespaceSubmit();
+                  if (e.key === 'Escape') {
+                    setNamespaceInput(protocol.namespace || '');
+                    setIsEditingNamespace(false);
+                  }
+                }}
+                autoFocus
+              />
+            ) : (
+              <button
+                onClick={() => setIsEditingNamespace(true)}
+                className="text-xs font-mono text-gray-400 hover:text-gray-200 px-1 py-0.5 rounded hover:bg-gray-800/60 transition"
+                title="Click to edit protocol namespace"
+              >
+                {protocol.namespace || '(no namespace)'}
+              </button>
+            )}
           </div>
 
           {/* Add Record button */}
@@ -581,6 +675,8 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
               annotations={annotations}
               partnerFieldsMap={partnerFieldsMap}
               linkingFieldId={linkingFieldId}
+              selectedFieldId={selectedFieldId}
+              onSelectField={onSelectField}
               addingFieldRecord={addingFieldRecord}
               newFieldName={newFieldName}
               newFieldType={newFieldType}

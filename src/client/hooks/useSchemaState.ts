@@ -27,6 +27,8 @@ export interface UseSchemaStateReturn {
   canRedo: boolean;
   isDirty: boolean;
   setProtocol: (protocol: AvroProtocol | null) => void;
+  setProtocolName: (name: string) => void;
+  setProtocolNamespace: (namespace: string) => void;
   setSchemaVersion: (version: string) => void;
   updateRecordNamespace: (recordName: string, namespace: string, currentNamespace?: string) => void;
   addField: (recordName: string, field: Omit<AvroField, 'id'> & { id?: string }, index?: number, recordNamespace?: string) => void;
@@ -113,6 +115,28 @@ export class SchemaStateManager {
     this.current = clone;
     this.history = [clone];
     this.historyIndex = 0;
+  }
+
+  public setProtocolName(name: string): void {
+    if (!this.current) return;
+    const next = structuredClone(this.current);
+    const trimmed = name.trim();
+    if (trimmed) {
+      next.protocol = trimmed;
+      this.pushState(next);
+    }
+  }
+
+  public setProtocolNamespace(namespace: string): void {
+    if (!this.current) return;
+    const next = structuredClone(this.current);
+    const trimmed = namespace.trim();
+    if (trimmed) {
+      next.namespace = trimmed;
+    } else {
+      delete next.namespace;
+    }
+    this.pushState(next);
   }
 
   public setSchemaVersion(version: string): void {
@@ -494,6 +518,34 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
     setHistoryIndex(0);
   }, []);
 
+  const setProtocolName = useCallback(
+    (name: string) => {
+      if (!edited) return;
+      const next = structuredClone(edited);
+      const trimmed = name.trim();
+      if (trimmed) {
+        next.protocol = trimmed;
+        commitNextState(next);
+      }
+    },
+    [edited, commitNextState]
+  );
+
+  const setProtocolNamespace = useCallback(
+    (namespace: string) => {
+      if (!edited) return;
+      const next = structuredClone(edited);
+      const trimmed = namespace.trim();
+      if (trimmed) {
+        next.namespace = trimmed;
+      } else {
+        delete next.namespace;
+      }
+      commitNextState(next);
+    },
+    [edited, commitNextState]
+  );
+
   const setSchemaVersion = useCallback(
     (version: string) => {
       if (!edited) return;
@@ -846,6 +898,8 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
     canRedo,
     isDirty,
     setProtocol,
+    setProtocolName,
+    setProtocolNamespace,
     setSchemaVersion,
     updateRecordNamespace,
     addField,

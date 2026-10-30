@@ -20,6 +20,8 @@ export interface SchemaViewerProps {
   partnerFieldsMap?: Map<string, LinkedPartnerInfo>; // origFieldId -> edited partner info
   availableEditedRecordNames?: string[];
   linkingFieldId?: string | null;
+  selectedFieldId?: string | null;
+  onSelectField?: (fieldId: string | null) => void;
   onStartLinking?: (fieldId: string, isOriginal: boolean) => void;
   onLinkField?: (targetFieldId: string) => void;
   onUnlink?: (fieldId: string) => void;
@@ -35,6 +37,8 @@ interface DraggableFieldRowProps {
   linkedPartner?: LinkedPartnerInfo;
   isLinkingActive?: boolean;
   isSelfLinking?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
   onStartLinking?: () => void;
   onLinkToThis?: () => void;
   onUnlink?: () => void;
@@ -47,6 +51,8 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
   linkedPartner,
   isLinkingActive,
   isSelfLinking,
+  isSelected,
+  onSelect,
   onStartLinking,
   onLinkToThis,
   onUnlink,
@@ -129,9 +135,12 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
       ref={setNodeRef}
       id={`field-orig-${field.id}`}
       style={style}
-      className={`group px-3 py-2 flex items-center justify-between text-xs transition-colors hover:bg-gray-800/40 ${getRowDiffStyle(
+      onClick={onSelect}
+      className={`group px-3 py-2 flex items-center justify-between text-xs transition-all cursor-pointer hover:bg-gray-800/40 ${getRowDiffStyle(
         diffStatus
-      )} ${isDragging ? 'shadow-lg border-indigo-500 bg-gray-900/90' : ''}`}
+      )} ${isDragging ? 'shadow-lg border-indigo-500 bg-gray-900/90' : ''} ${
+        isSelected ? 'bg-indigo-950/40 ring-1 ring-cyan-400 shadow-md' : ''
+      }`}
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
         {/* Drag Handle */}
@@ -222,6 +231,8 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({
   partnerFieldsMap,
   availableEditedRecordNames = [],
   linkingFieldId,
+  selectedFieldId,
+  onSelectField,
   onStartLinking,
   onLinkField,
   onUnlink,
@@ -397,6 +408,8 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({
                       linkedPartner={linkedPartner}
                       isLinkingActive={isLinkingActive}
                       isSelfLinking={isSelfLinking}
+                      isSelected={selectedFieldId === field.id}
+                      onSelect={() => onSelectField?.(selectedFieldId === field.id ? null : field.id)}
                       onStartLinking={onStartLinking ? () => onStartLinking(field.id, true) : undefined}
                       onLinkToThis={onLinkField ? () => onLinkField(field.id) : undefined}
                       onUnlink={onUnlink && linkedPartner ? () => onUnlink(field.id) : undefined}

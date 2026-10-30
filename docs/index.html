@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avro Studio - Visual Avro IDL Schema Restructurer & Data Studio</title>
+  <meta name="description" content="Next-generation visual Apache Avro IDL & Avro JSON Schema Restructurer, migration tracker, BigQuery schema generator, and automated data reconciler.">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            },
+            slateBg: '#0b0f19',
+            cardBg: '#111827',
+            cardBorder: '#1f2937',
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .glow-indigo {
+      box-shadow: 0 0 35px -5px rgba(99, 102, 241, 0.35);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 30px -5px rgba(56, 189, 248, 0.3);
+    }
+    pre code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+  </style>
+</head>
+<body class="bg-[#0b0f19] text-slate-100 min-h-screen selection:bg-brand-500 selection:text-white antialiased">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="sticky top-0 z-50 backdrop-blur-md bg-[#0b0f19]/80 border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-brand-500/20">
+          <i class="fa-solid fa-diagram-project text-white text-base"></i>
+        </div>
+        <div>
+          <span class="text-xl font-bold tracking-tight text-white">Avro <span class="text-brand-400">Studio</span></span>
+          <span class="ml-2 px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-brand-300 border border-slate-700">v2.4.0</span>
+        </div>
+      </div>
+
+      <nav class="hidden md:flex items-center space-x-8 text-sm font-medium text-slate-300">
+        <a href="#features" class="hover:text-brand-400 transition-colors">Features</a>
+        <a href="#architecture" class="hover:text-brand-400 transition-colors">Architecture</a>
+        <a href="#cross-record" class="hover:text-brand-400 transition-colors">Cross-Record Moves</a>
+        <a href="#shortcuts" class="hover:text-brand-400 transition-colors">Shortcuts</a>
+        <a href="#api" class="hover:text-brand-400 transition-colors">API &amp; Formats</a>
+        <a href="#docker" class="hover:text-brand-400 transition-colors">Docker &amp; Quickstart</a>
+      </nav>
+
+      <div class="flex items-center space-x-4">
+        <a href="https://github.com/example/avro-studio" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
+          <i class="fa-brands fa-github mr-2"></i> GitHub
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO SECTION -->
+  <section class="relative pt-16 pb-20 overflow-hidden">
+    <div class="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.18),rgba(255,255,255,0))]"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+      <div class="text-center max-w-3xl mx-auto">
+        <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-medium bg-brand-950/80 text-brand-300 border border-brand-800 mb-6">
+          <span class="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Engineered for Production Data Platform &amp; Analytics Teams</span>
+        </div>
+        <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-tight">
+          Visual Avro Restructuring &amp; Schema Migration Studio
+        </h1>
+        <p class="mt-6 text-lg sm:text-xl text-slate-300 leading-relaxed">
+          Author, restructure, diff, and reconcile Apache Avro IDL (<code class="text-indigo-300 font-mono">.avdl</code>) and Avro JSON schemas side-by-side with live bezier field linking, automated BigQuery generation, and transactional history.
+        </p>
+
+        <div class="mt-8 flex flex-col sm:flex-row justify-center gap-4">
+          <a href="#preview" class="inline-flex items-center justify-center px-6 py-3 rounded-lg text-base font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-600/30 transition">
+            <i class="fa-solid fa-play mr-2 text-xs"></i> Explore UI Preview
+          </a>
+          <a href="#docker" class="inline-flex items-center justify-center px-6 py-3 rounded-lg text-base font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
+            <i class="fa-solid fa-terminal mr-2 text-xs text-brand-400"></i> Run with Docker
+          </a>
+        </div>
+      </div>
+
+      <!-- MAIN APP SCREENSHOT / SVG PREVIEW -->
+      <div id="preview" class="mt-14 relative rounded-xl border border-slate-800 bg-slate-900/60 p-2 sm:p-4 glow-indigo">
+        <div class="rounded-lg overflow-hidden border border-slate-800">
+          <img src="assets/app-preview.svg" alt="Avro Studio Dual-Pane Restructurer Interface" class="w-full h-auto block" />
+        </div>
+        <p class="mt-3 text-center text-xs sm:text-sm text-slate-400">
+          <strong class="text-slate-200">Interactive Dual-Pane Restructurer:</strong> Original Registry Schema (left) connected via SVG bezier curves to Working Copy (right), featuring explicit cross-record movement of <code class="text-amber-400">customerId</code> to <code class="text-sky-400">OrderSummary</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CORE CAPABILITIES GRID -->
+  <section id="features" class="py-20 border-t border-slate-800 bg-[#0d1322]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400">Capabilities</h2>
+        <p class="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">Everything required for mission-critical schema migrations</p>
+        <p class="mt-4 text-slate-400">Built to eliminate breaking changes, manual JSON/IDL editing errors, and untracked downstream data pipeline drifts.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <!-- Card 1 -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/80 p-6 hover:border-brand-500/50 transition">
+          <div class="w-12 h-12 rounded-lg bg-indigo-950 border border-indigo-800 flex items-center justify-center text-brand-400 mb-5">
+            <i class="fa-solid fa-columns text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">Dual-Pane Visual Restructurer</h3>
+          <p class="mt-2 text-sm text-slate-400 leading-relaxed">
+            Side-by-side editing pane with immutable source contract on the left and dynamic editable draft on the right. Live SVG cubic bezier connecting lines trace every field and lineage.
+          </p>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/80 p-6 hover:border-brand-500/50 transition">
+          <div class="w-12 h-12 rounded-lg bg-amber-950 border border-amber-800 flex items-center justify-center text-amber-400 mb-5">
+            <i class="fa-solid fa-shuffle text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">Cross-Record Restructuring</h3>
+          <p class="mt-2 text-sm text-slate-400 leading-relaxed">
+            Move fields across separate records (e.g. from <code class="text-indigo-300">Order</code> into new normalized <code class="text-sky-300">OrderSummary</code> or <code class="text-sky-300">Shipment</code> records). Visual bezier lines highlight and track lineage.
+          </p>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/80 p-6 hover:border-brand-500/50 transition">
+          <div class="w-12 h-12 rounded-lg bg-emerald-950 border border-emerald-800 flex items-center justify-center text-emerald-400 mb-5">
+            <i class="fa-solid fa-layer-group text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">Multi-Contract Workspaces</h3>
+          <p class="mt-2 text-sm text-slate-400 leading-relaxed">
+            Manage multiple interrelated schema contracts in tabbed sessions. Add, duplicate, rename, or switch contracts instantly while maintaining workspace state.
+          </p>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/80 p-6 hover:border-brand-500/50 transition">
+          <div class="w-12 h-12 rounded-lg bg-sky-950 border border-sky-800 flex items-center justify-center text-sky-400 mb-5">
+            <i class="fa-solid fa-tag text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">SemVer Bumping &amp; Namespaces</h3>
+          <p class="mt-2 text-sm text-slate-400 leading-relaxed">
+            One-click semantic version bumps (<code class="text-indigo-300">+Patch</code>, <code class="text-sky-300">+Minor</code>, <code class="text-rose-300">+Major</code>) with dedicated namespace isolation per record to avoid naming collisions across microservices.
+          </p>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/80 p-6 hover:border-brand-500/50 transition">
+          <div class="w-12 h-12 rounded-lg bg-purple-950 border border-purple-800 flex items-center justify-center text-purple-400 mb-5">
+            <i class="fa-solid fa-database text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">BigQuery &amp; AVDL Serialization</h3>
+          <p class="mt-2 text-sm text-slate-400 leading-relaxed">
+            Generate production-ready BigQuery JSON schemas and standard Avro IDL. Full support for nested RECORD modes, REPEATED arrays, nullable fields, and logical types (<code class="text-purple-300">timestamp-millis</code>, <code class="text-purple-300">decimal</code>).
+          </p>
+        </div>
+
+        <!-- Card 6 -->
+        <div class="rounded-xl border border-slate-800 bg-slate-900/80 p-6 hover:border-brand-500/50 transition">
+          <div class="w-12 h-12 rounded-lg bg-rose-950 border border-rose-800 flex items-center justify-center text-rose-400 mb-5">
+            <i class="fa-solid fa-code-compare text-xl"></i>
+          </div>
+          <h3 class="text-lg font-bold text-white">Tabular Data Reconciliation</h3>
+          <p class="mt-2 text-sm text-slate-400 leading-relaxed">
+            Automated reconciliation engine executing key-based comparisons between source and target datasets using schema linkages, computing match percentages and mismatch details.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CROSS-RECORD RESTRUCTURING EXPLAINER -->
+  <section id="cross-record" class="py-20 border-t border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+        <div>
+          <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-950 text-amber-300 border border-amber-800 mb-4">
+            <i class="fa-solid fa-bolt"></i>
+            <span>Specialized Migration Capability</span>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Seamless Cross-Record Field Movement &amp; Linkage
+          </h2>
+          <p class="mt-4 text-base text-slate-300 leading-relaxed">
+            In modern event-driven architectures, domain refactoring often requires splitting monolithic records into normalized entities—for example, moving customer credentials and shipping addresses from an <code class="text-indigo-400">Order</code> record into an <code class="text-sky-400">OrderSummary</code> or <code class="text-sky-400">Shipment</code> event.
+          </p>
+
+          <ul class="mt-6 space-y-4">
+            <li class="flex items-start">
+              <div class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-900/60 text-emerald-400 flex items-center justify-center mt-1 text-xs">
+                <i class="fa-solid fa-check"></i>
+              </div>
+              <div class="ml-3">
+                <h4 class="text-sm font-bold text-white">Manual or Drag-and-Drop Reparenting</h4>
+                <p class="text-xs text-slate-400 mt-1">Re-link source fields to any target record or drop fields into new records with automatic ID tracking.</p>
+              </div>
+            </li>
+            <li class="flex items-start">
+              <div class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-900/60 text-emerald-400 flex items-center justify-center mt-1 text-xs">
+                <i class="fa-solid fa-check"></i>
+              </div>
+              <div class="ml-3">
+                <h4 class="text-sm font-bold text-white">Glowing Connection Overlays</h4>
+                <p class="text-xs text-slate-400 mt-1">SVG cubic bezier overlays adapt to viewport resizing and scrolling, highlighting cross-record links with luminous neon gradients.</p>
+              </div>
+            </li>
+            <li class="flex items-start">
+              <div class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-900/60 text-emerald-400 flex items-center justify-center mt-1 text-xs">
+                <i class="fa-solid fa-check"></i>
+              </div>
+              <div class="ml-3">
+                <h4 class="text-sm font-bold text-white">Automated Migration Spec Export</h4>
+                <p class="text-xs text-slate-400 mt-1">Export linkages as structured JSON artifacts for automated ingestion by Spark, Flink, or dbt ETL migration pipelines.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl">
+          <h3 class="text-xs uppercase tracking-wider text-slate-400 font-bold mb-4 flex items-center justify-between">
+            <span>Linkages JSON Export Sample</span>
+            <span class="text-brand-400"><i class="fa-regular fa-file-code mr-1"></i> linkages.json</span>
+          </h3>
+          <pre class="bg-slate-950 p-4 rounded-lg overflow-x-auto text-xs text-slate-200 border border-slate-800"><code>{
+  "schemaVersion": "2.1.0",
+  "sourceProtocol": "OrderServiceProtocol",
+  "linkages": [
+    {
+      "sourceRecord": "Order",
+      "sourceField": "customerId",
+      "sourceType": "string",
+      "targetRecord": "OrderSummary",
+      "targetField": "customerId",
+      "targetType": "string",
+      "relationship": "CROSS_RECORD_MOVED",
+      "isManual": true
+    },
+    {
+      "sourceRecord": "Order",
+      "sourceField": "orderTotal",
+      "targetRecord": "Order",
+      "targetField": "totalAmount",
+      "relationship": "RENAMED"
+    }
+  ]
+}</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KEYBOARD SHORTCUTS -->
+  <section id="shortcuts" class="py-16 border-t border-slate-800 bg-[#0d1322]">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400">Productivity</h2>
+        <p class="mt-2 text-3xl font-bold tracking-tight text-white">Global Keyboard Shortcuts</p>
+        <p class="mt-2 text-slate-400 text-sm">Engineered for seamless keyboard navigation during high-speed schema refactoring.</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-5 text-center">
+          <div class="inline-block px-3 py-1.5 bg-slate-800 text-brand-300 font-mono text-sm rounded border border-slate-700 font-semibold mb-3">Ctrl / ⌘ + Z</div>
+          <h4 class="text-sm font-bold text-white">Undo Action</h4>
+          <p class="text-xs text-slate-400 mt-1">Revert previous schema mutation or field reordering.</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-5 text-center">
+          <div class="inline-block px-3 py-1.5 bg-slate-800 text-brand-300 font-mono text-sm rounded border border-slate-700 font-semibold mb-3">Ctrl / ⌘ + Y</div>
+          <h4 class="text-sm font-bold text-white">Redo Action</h4>
+          <p class="text-xs text-slate-400 mt-1">Re-apply reverted changes across contracts.</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-5 text-center">
+          <div class="inline-block px-3 py-1.5 bg-slate-800 text-brand-300 font-mono text-sm rounded border border-slate-700 font-semibold mb-3">Ctrl + Shift + Z</div>
+          <h4 class="text-sm font-bold text-white">Alternative Redo</h4>
+          <p class="text-xs text-slate-400 mt-1">Standard macOS and cross-platform redo shortcut.</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-lg p-5 text-center">
+          <div class="inline-block px-3 py-1.5 bg-slate-800 text-brand-300 font-mono text-sm rounded border border-slate-700 font-semibold mb-3">Escape (Esc)</div>
+          <h4 class="text-sm font-bold text-white">Close Active Modal</h4>
+          <p class="text-xs text-slate-400 mt-1">Instantly dismiss any open preview, modal, or drawer.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE & SYSTEM DESIGN -->
+  <section id="architecture" class="py-20 border-t border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400">Architecture</h2>
+        <p class="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">Single-Port Architecture &amp; High-Throughput Core</p>
+        <p class="mt-4 text-slate-400">Lightweight Hono backend, better-sqlite3 with WAL mode, and modular AST serialization pipelines.</p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-10 shadow-2xl">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div class="border-b md:border-b-0 md:border-r border-slate-800 pb-6 md:pb-0 md:pr-6">
+            <h4 class="text-base font-bold text-brand-300 flex items-center">
+              <i class="fa-solid fa-desktop mr-2"></i> Client Layer
+            </h4>
+            <p class="text-xs text-slate-400 mt-2">
+              React 19 SPA built with Vite and Tailwind CSS. Features customized <code class="text-indigo-300 font-mono">@dnd-kit</code> integration for drag-and-drop field reordering, real-time SVG bezier path calculation, and per-user identity tracking.
+            </p>
+            <ul class="mt-4 space-y-1.5 text-xs text-slate-300">
+              <li>• Responsive dual-pane viewport</li>
+              <li>• Live syntax-highlighted IDL preview</li>
+              <li>• Dynamic modal stack with Esc listener</li>
+            </ul>
+          </div>
+
+          <div class="border-b md:border-b-0 md:border-r border-slate-800 pb-6 md:pb-0 md:pr-6">
+            <h4 class="text-base font-bold text-emerald-400 flex items-center">
+              <i class="fa-solid fa-server mr-2"></i> Server &amp; Proxy Layer
+            </h4>
+            <p class="text-xs text-slate-400 mt-2">
+              Unified Hono server hosting REST APIs and serving client bundle on port <code class="text-emerald-300 font-mono">3000</code>. Includes built-in CORS bypass proxy for Confluent / Karapace Schema Registry endpoints.
+            </p>
+            <ul class="mt-4 space-y-1.5 text-xs text-slate-300">
+              <li>• <code class="text-emerald-400">/api/workspaces</code> persistence</li>
+              <li>• <code class="text-emerald-400">/api/registry/*</code> proxy endpoints</li>
+              <li>• Static asset serving with fallback routing</li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 class="text-base font-bold text-sky-400 flex items-center">
+              <i class="fa-solid fa-hard-drive mr-2"></i> Storage &amp; Engine Layer
+            </h4>
+            <p class="text-xs text-slate-400 mt-2">
+              Embedded SQLite storage managed via <code class="text-sky-300 font-mono">better-sqlite3</code> running in write-ahead logging (WAL) mode for multi-session data persistence with sub-millisecond query performance.
+            </p>
+            <ul class="mt-4 space-y-1.5 text-xs text-slate-300">
+              <li>• Multi-contract schema version snapshots</li>
+              <li>• Key-based tabular data reconciliation engine</li>
+              <li>• BigQuery type translation AST pipeline</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- API REFERENCE & FORMATS -->
+  <section id="api" class="py-20 border-t border-slate-800 bg-[#0d1322]">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400">Documentation</h2>
+        <p class="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">API Endpoints &amp; Contract Formats</p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- REST API -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 class="text-base font-bold text-white mb-4 flex items-center">
+            <i class="fa-solid fa-network-wired text-brand-400 mr-2"></i> REST API Routes
+          </h3>
+          <div class="space-y-4 text-xs font-mono">
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold">GET</span>
+                <span class="text-slate-200">/api/workspaces</span>
+              </div>
+              <p class="text-slate-400 mt-1 font-sans text-xs">List all persisted workspaces, metadata, and active contracts.</p>
+            </div>
+
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded bg-sky-950 text-sky-400 font-bold">POST</span>
+                <span class="text-slate-200">/api/workspaces</span>
+              </div>
+              <p class="text-slate-400 mt-1 font-sans text-xs">Save or update workspace payload with multi-contract protocols.</p>
+            </div>
+
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded bg-amber-950 text-amber-400 font-bold">POST</span>
+                <span class="text-slate-200">/api/registry/proxy</span>
+              </div>
+              <p class="text-slate-400 mt-1 font-sans text-xs">Proxy schema queries to external Confluent/Karapace Schema Registries.</p>
+            </div>
+
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded bg-purple-950 text-purple-400 font-bold">GET</span>
+                <span class="text-slate-200">/health</span>
+              </div>
+              <p class="text-slate-400 mt-1 font-sans text-xs">Liveness/readiness probe reporting database connectivity.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FORMATS SUPPORTED -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 class="text-base font-bold text-white mb-4 flex items-center">
+            <i class="fa-solid fa-file-invoice text-emerald-400 mr-2"></i> Supported Schema Specifications
+          </h3>
+          <div class="space-y-3 text-sm text-slate-300">
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <h4 class="font-bold text-white text-xs">Apache Avro IDL (.avdl)</h4>
+              <p class="text-xs text-slate-400 mt-1">Full support for <code class="text-brand-300 font-mono">@namespace</code>, protocols, nested records, enums, fixed, arrays, maps, and unions.</p>
+            </div>
+
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <h4 class="font-bold text-white text-xs">Avro JSON Schema (.avsc)</h4>
+              <p class="text-xs text-slate-400 mt-1">Bi-directional conversion between standard Avro JSON schema declarations and IDL protocols.</p>
+            </div>
+
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <h4 class="font-bold text-white text-xs">Google BigQuery Table Schema</h4>
+              <p class="text-xs text-slate-400 mt-1">Translates Avro schema trees into BigQuery field arrays with <code class="text-indigo-300 font-mono">RECORD</code> nested modes and documentation pass-through.</p>
+            </div>
+
+            <div class="p-3 bg-slate-950 rounded border border-slate-800">
+              <h4 class="font-bold text-white text-xs">Migration Linkages Spec (.json)</h4>
+              <p class="text-xs text-slate-400 mt-1">Machine-readable migration dictionary capturing identical, renamed, added, deleted, and cross-record moved fields.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOCKER & RUNNING LOCALLY -->
+  <section id="docker" class="py-20 border-t border-slate-800">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <h2 class="text-xs uppercase tracking-widest font-bold text-brand-400">Deployment</h2>
+        <p class="mt-2 text-3xl font-bold tracking-tight text-white">Docker &amp; Quickstart</p>
+      </div>
+
+      <div class="space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h4 class="text-sm font-bold text-white flex items-center mb-3">
+            <i class="fa-brands fa-docker text-sky-400 text-lg mr-2"></i> Docker Run (Recommended)
+          </h4>
+          <pre class="bg-slate-950 p-4 rounded-lg overflow-x-auto text-xs text-slate-200 border border-slate-800 font-mono"><code># Build Docker image
+docker build -t avro-studio:latest .
+
+# Run container with persistent SQLite volume on port 3000
+docker run -d -p 3000:3000 -v avro-data:/data --name avro-studio avro-studio:latest
+
+# Open in browser: http://localhost:3000</code></pre>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h4 class="text-sm font-bold text-white flex items-center mb-3">
+            <i class="fa-brands fa-node-js text-emerald-400 text-lg mr-2"></i> Local Development Setup
+          </h4>
+          <pre class="bg-slate-950 p-4 rounded-lg overflow-x-auto text-xs text-slate-200 border border-slate-800 font-mono"><code># Clone and install dependencies
+git clone https://github.com/example/avro-studio.git
+cd avro-studio
+npm install
+
+# Run Vitest test suite (140+ unit, integration & e2e tests)
+npm test
+
+# Build client and server bundles
+npm run build
+
+# Start production server
+npm start</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-slate-800 py-10 bg-[#070b13] text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center space-x-2">
+        <div class="w-6 h-6 rounded bg-brand-600 flex items-center justify-center text-white text-xs font-bold">
+          A
+        </div>
+        <span class="text-slate-300 font-semibold">Avro Studio</span>
+        <span>— Released under Apache-2.0 License</span>
+      </div>
+      <div class="flex space-x-6 text-slate-400">
+        <a href="#preview" class="hover:text-white transition">UI Preview</a>
+        <a href="#features" class="hover:text-white transition">Features</a>
+        <a href="#architecture" class="hover:text-white transition">Architecture</a>
+        <a href="#shortcuts" class="hover:text-white transition">Shortcuts</a>
+        <a href="https://github.com/example/avro-studio" target="_blank" rel="noopener noreferrer" class="hover:text-white transition">GitHub Repo</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

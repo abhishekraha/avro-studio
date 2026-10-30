@@ -35,6 +35,8 @@ export interface HeaderProps {
   onOpenRecon: () => void;
   onOpenImport: () => void;
   onNewWorkspace: () => void;
+  viewMode?: 'compare' | 'create';
+  onToggleViewMode?: (mode: 'compare' | 'create') => void;
   onOpenWorkspaceModal?: () => void;
   userId?: string | null;
   onOpenUserModal?: () => void;
@@ -60,6 +62,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRecon,
   onOpenImport,
   onNewWorkspace,
+  viewMode = 'compare',
+  onToggleViewMode,
   userId,
   onOpenUserModal,
   schemaVersion,
@@ -232,24 +236,55 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Center: Undo / Redo controls */}
-      <div className="flex items-center gap-1 bg-gray-950 p-1 rounded-lg border border-gray-800">
-        <button
-          onClick={onUndo}
-          disabled={!canUndo}
-          className="p-1.5 rounded hover:bg-gray-800 text-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-          title="Undo (Ctrl+Z)"
-        >
-          <Undo2 className="w-4 h-4" />
-        </button>
-        <button
-          onClick={onRedo}
-          disabled={!canRedo}
-          className="p-1.5 rounded hover:bg-gray-800 text-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-          title="Redo (Ctrl+Y)"
-        >
-          <Redo2 className="w-4 h-4" />
-        </button>
+      {/* Center: Undo / Redo controls & View Mode Switcher */}
+      <div className="flex items-center gap-3">
+        {onToggleViewMode && (
+          <div className="flex items-center bg-gray-950 p-0.5 rounded-lg border border-gray-800 text-xs">
+            <button
+              onClick={() => onToggleViewMode('compare')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium transition ${
+                viewMode === 'compare'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-850'
+              }`}
+              title="Compare and restructure against original baseline"
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              <span>Compare & Edit</span>
+            </button>
+            <button
+              onClick={() => onToggleViewMode('create')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium transition ${
+                viewMode === 'create'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-850'
+              }`}
+              title="Build Avro schema from scratch in full editor view"
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              <span>Create New Mode</span>
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1 bg-gray-950 p-1 rounded-lg border border-gray-800">
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            className="p-1.5 rounded hover:bg-gray-800 text-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onRedo}
+            disabled={!canRedo}
+            className="p-1.5 rounded hover:bg-gray-800 text-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Right: Actions */}
