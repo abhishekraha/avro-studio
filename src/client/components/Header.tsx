@@ -200,7 +200,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="text-xs font-mono font-semibold text-indigo-300 hover:text-indigo-200 transition"
               title="Click to edit schema version"
             >
-              {`v${schemaVersion || '1.0.0'}`}
+              {'v' + (schemaVersion || '1.0.0')}
             </button>
           )}
 

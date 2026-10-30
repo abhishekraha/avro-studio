@@ -22,6 +22,7 @@ export interface SortableFieldProps {
   onLinkToThis?: () => void;
   onUnlink?: () => void;
   availableNamedTypes: string[];
+  existingFieldNames?: string[];
 }
 
 export const SortableField: React.FC<SortableFieldProps> = ({
@@ -38,6 +39,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
   onLinkToThis,
   onUnlink,
   availableNamedTypes,
+  existingFieldNames = [],
 }) => {
   const {
     attributes,
@@ -50,6 +52,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(field.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -57,12 +60,32 @@ export const SortableField: React.FC<SortableFieldProps> = ({
     opacity: isDragging ? 0.3 : 1,
   };
 
+  const isDuplicate = existingFieldNames.some(
+    (n) => n.toLowerCase() === nameValue.trim().toLowerCase() && n.toLowerCase() !== field.name.toLowerCase()
+  );
+
   const handleNameSave = () => {
-    setIsEditingName(false);
-    if (nameValue.trim() && nameValue.trim() !== field.name) {
-      onRename(nameValue.trim());
-    } else {
+    const trimmed = nameValue.trim();
+    if (!trimmed) {
       setNameValue(field.name);
+      setRenameError(null);
+      setIsEditingName(false);
+      return;
+    }
+
+    if (isDuplicate) {
+      setRenameError(`Duplicate field name '${trimmed}'`);
+      return;
+    }
+
+    try {
+      if (trimmed !== field.name) {
+        onRename(trimmed);
+      }
+      setRenameError(null);
+      setIsEditingName(false);
+    } catch (err: any) {
+      setRenameError(err.message || 'Duplicate field name');
     }
   };
 
@@ -132,21 +155,33 @@ export const SortableField: React.FC<SortableFieldProps> = ({
 
         {/* Field name (in-place editable) */}
         {isEditingName ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 relative">
             <input
               type="text"
               value={nameValue}
-              onChange={(e) => setNameValue(e.target.value)}
+              onChange={(e) => {
+                setNameValue(e.target.value);
+                setRenameError(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleNameSave();
                 if (e.key === 'Escape') {
                   setNameValue(field.name);
+                  setRenameError(null);
                   setIsEditingName(false);
                 }
               }}
               autoFocus
-              className="bg-gray-800 text-gray-100 font-mono text-xs px-2 py-0.5 rounded border border-indigo-500 focus:outline-none"
+              className={`bg-gray-800 text-gray-100 font-mono text-xs px-2 py-0.5 rounded border focus:outline-none ${
+                isDuplicate || renameError ? 'border-rose-500 ring-1 ring-rose-500' : 'border-indigo-500'
+              }`}
             />
+            {/* Tooltip / error banner */}
+            {(isDuplicate || renameError) && (
+              <span className="absolute -top-7 left-0 z-20 px-2 py-0.5 text-[10px] font-medium bg-rose-950 text-rose-300 border border-rose-800 rounded shadow-md whitespace-nowrap">
+                {renameError || `Field '${nameValue.trim()}' already exists in record`}
+              </span>
+            )}
             <button
               onClick={handleNameSave}
               className="p-1 hover:text-emerald-400 text-gray-400"
@@ -156,6 +191,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
             <button
               onClick={() => {
                 setNameValue(field.name);
+                setRenameError(null);
                 setIsEditingName(false);
               }}
               className="p-1 hover:text-rose-400 text-gray-400"

@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import type { AvroProtocol, AvroRecordType, AvroField } from '../../../core/types/schema';
 import type { LinkType } from '../../../core/types/linkage';
 import { isRecordType } from '../../../core/types/schema';
 import { formatAvdlType } from '../../../core/serializer/avdlSerializer';
-import { BookOpen, FileText, GripVertical, Link as LinkIcon, X as XIcon } from 'lucide-react';
+import { BookOpen, FileText, GripVertical, Link as LinkIcon, X as XIcon, Copy, Link2 } from 'lucide-react';
 
 export interface LinkedPartnerInfo {
   fieldId: string;
@@ -16,11 +16,16 @@ export interface SchemaViewerProps {
   protocol: AvroProtocol | null;
   annotations?: Map<string, LinkType | 'unchanged'>;
   manualLinks?: Array<[string, string]>;
+  recordLinks?: Array<[string, string]>;
   partnerFieldsMap?: Map<string, LinkedPartnerInfo>; // origFieldId -> edited partner info
+  availableEditedRecordNames?: string[];
   linkingFieldId?: string | null;
   onStartLinking?: (fieldId: string, isOriginal: boolean) => void;
   onLinkField?: (targetFieldId: string) => void;
   onUnlink?: (fieldId: string) => void;
+  onCopyRecord?: (record: AvroRecordType) => void;
+  onLinkRecord?: (originalRecordName: string, editedRecordName: string) => void;
+  onUnlinkRecord?: (originalRecordName: string) => void;
 }
 
 interface DraggableFieldRowProps {
@@ -213,12 +218,27 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
 export const SchemaViewer: React.FC<SchemaViewerProps> = ({
   protocol,
   annotations,
+  recordLinks = [],
   partnerFieldsMap,
+  availableEditedRecordNames = [],
   linkingFieldId,
   onStartLinking,
   onLinkField,
   onUnlink,
+  onCopyRecord,
+  onLinkRecord,
+  onUnlinkRecord,
 }) => {
+  const [linkingRecordName, setLinkingRecordName] = useState<string | null>(null);
+
+  // Map of originalRecordName -> editedRecordName from recordLinks
+  const origToEditedRecMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [editedRec, origRec] of recordLinks) {
+      map.set(origRec, editedRec);
+    }
+    return map;
+  }, [recordLinks]);
   if (!protocol || protocol.types.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8 select-none">
@@ -260,6 +280,7 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({
           }
 
           const record = typeDef as AvroRecordType;
+          const linkedEditedRecordName = origToEditedRecMap.get(record.name);
 
           return (
             <div
@@ -267,17 +288,96 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({
               className="bg-gray-900/90 border border-gray-800 rounded-xl overflow-hidden shadow-sm"
             >
               {/* Record Banner */}
-              <div className="bg-gray-800/80 px-4 py-2.5 border-b border-gray-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-400" />
-                  <span className="font-semibold text-sm text-gray-200">{record.name}</span>
-                  <span className="text-xs text-gray-500 font-mono">
+              <div className="bg-gray-800/80 px-4 py-2.5 border-b border-gray-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <span className="font-semibold text-sm text-gray-200 truncate">{record.name}</span>
+                  <span className="text-xs text-gray-500 font-mono shrink-0">
                     ({record.fields.length} {record.fields.length === 1 ? 'field' : 'fields'})
                   </span>
+                  {record.namespace && (
+                    <span className="text-[11px] text-gray-500 font-mono truncate hidden sm:inline">{record.namespace}</span>
+                  )}
                 </div>
-                {record.namespace && (
-                  <span className="text-[11px] text-gray-500 font-mono">{record.namespace}</span>
-                )}
+
+                {/* Record Linking & Copy Controls */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Record Link Status Pill / Link selector */}
+                  {linkedEditedRecordName ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-indigo-950/90 text-indigo-300 border border-indigo-700/60 shadow-xs">
+                      <Link2 className="w-3 h-3 text-indigo-400" />
+                      <span className="max-w-[100px] truncate" title={`Linked to editor record: ${linkedEditedRecordName}`}>
+                        {'linked to ' + linkedEditedRecordName}
+                      </span>
+                      {onUnlinkRecord && (
+                        <button
+                          type="button"
+                          onClick={() => onUnlinkRecord(record.name)}
+                          className="hover:text-indigo-100 hover:bg-indigo-900/50 rounded p-0.5 transition ml-0.5"
+                          title="Unlink record"
+                          aria-label="Unlink record"
+                        >
+                          <XIcon className="w-3 h-3" />
+                        </button>
+                      )}
+                    </span>
+                  ) : linkingRecordName === record.name ? (
+                    <div className="flex items-center gap-1 bg-gray-900 px-2 py-0.5 rounded border border-indigo-500 text-xs">
+                      <select
+                        autoFocus
+                        defaultValue=""
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val && onLinkRecord) {
+                            onLinkRecord(record.name, val);
+                          }
+                          setLinkingRecordName(null);
+                        }}
+                        className="bg-transparent text-indigo-300 text-xs focus:outline-none cursor-pointer"
+                      >
+                        <option value="" disabled>Select target record...</option>
+                        {availableEditedRecordNames.map((target) => (
+                          <option key={target} value={target} className="bg-gray-900 text-gray-100">
+                            {target}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setLinkingRecordName(null)}
+                        className="text-gray-400 hover:text-rose-400 p-0.5"
+                        title="Cancel linking"
+                      >
+                        <XIcon className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    onLinkRecord && availableEditedRecordNames.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setLinkingRecordName(record.name)}
+                        className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-300 hover:text-indigo-300 bg-gray-800/80 hover:bg-gray-700/80 border border-gray-700 rounded-md transition shadow-xs"
+                        title="Link record to a renamed counterpart in editor"
+                      >
+                        <Link2 className="w-3 h-3 text-gray-400" />
+                        <span>Link Record</span>
+                      </button>
+                    )
+                  )}
+
+                  {/* Copy Record to Editor Button */}
+                  {onCopyRecord && (
+                    <button
+                      type="button"
+                      onClick={() => onCopyRecord(record)}
+                      className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 rounded-md transition shadow-xs"
+                      title="Copy entire record to editor and bind field linkages"
+                    >
+                      <Copy className="w-3 h-3 text-emerald-400" />
+                      <span>Copy Record to Editor</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Fields Table */}
