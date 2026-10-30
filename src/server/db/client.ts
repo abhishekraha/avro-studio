@@ -35,6 +35,24 @@ export function createDatabase(dbPath: string = ':memory:'): AppDatabase {
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+  `);
+
+  // Migrate existing SQLite files created before multi-contract support
+  try {
+    const columns = sqlite.pragma('table_info(workspaces)') as Array<{ name: string }>;
+    const colNames = new Set(columns.map((c) => c.name));
+    if (!colNames.has('active_contract_id')) {
+      sqlite.exec('ALTER TABLE workspaces ADD COLUMN active_contract_id TEXT;');
+    }
+    if (!colNames.has('contracts')) {
+      sqlite.exec('ALTER TABLE workspaces ADD COLUMN contracts TEXT;');
+    }
+  } catch {
+    // Ignore migration errors if already present
+  }
+
+  sqlite.exec(`
+
 
     CREATE INDEX IF NOT EXISTS workspaces_user_id_idx ON workspaces (user_id);
 
