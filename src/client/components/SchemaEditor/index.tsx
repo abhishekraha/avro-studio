@@ -19,15 +19,16 @@ export interface SchemaEditorProps {
   onStartLinking?: (fieldId: string, isOriginal: boolean) => void;
   onLinkField?: (targetFieldId: string) => void;
   onUnlink?: (fieldId: string) => void;
-  onAddField: (recordName: string, name: string, type: AvroSchemaType) => void;
-  onRemoveField: (recordName: string, fieldId: string) => void;
-  onRenameField: (recordName: string, fieldId: string, newName: string) => void;
-  onUpdateFieldType: (recordName: string, fieldId: string, newType: AvroSchemaType) => void;
-  onReorderField: (recordName: string, oldIndex: number, newIndex: number) => void;
+  onAddField: (recordName: string, name: string, type: AvroSchemaType, recordNamespace?: string) => void;
+  onRemoveField: (recordName: string, fieldId: string, recordNamespace?: string) => void;
+  onRenameField: (recordName: string, fieldId: string, newName: string, recordNamespace?: string) => void;
+  onUpdateFieldType: (recordName: string, fieldId: string, newType: AvroSchemaType, recordNamespace?: string) => void;
+  onReorderField: (recordName: string, oldIndex: number, newIndex: number, recordNamespace?: string) => void;
   onMoveField: (sourceRecord: string, targetRecord: string, fieldId: string, targetIndex?: number) => void;
-  onAddRecord: (name: string) => void;
-  onRemoveRecord: (name: string) => void;
-  onRenameRecord: (oldName: string, newName: string) => void;
+  onAddRecord: (name: string, namespace?: string) => void;
+  onRemoveRecord: (name: string, namespace?: string) => void;
+  onRenameRecord: (oldName: string, newName: string, namespace?: string) => void;
+  onUpdateRecordNamespace?: (recordName: string, newNamespace: string, currentNamespace?: string) => void;
 }
 
 interface DroppableRecordCardProps {
@@ -42,15 +43,16 @@ interface DroppableRecordCardProps {
   setAddingFieldRecord: (rec: string | null) => void;
   setNewFieldName: (name: string) => void;
   setNewFieldType: (type: AvroSchemaType) => void;
-  onRenameRecord: (oldName: string, newName: string) => void;
-  onRemoveRecord: (name: string) => void;
-  onRenameField: (recordName: string, fieldId: string, newName: string) => void;
-  onUpdateFieldType: (recordName: string, fieldId: string, newType: AvroSchemaType) => void;
-  onRemoveField: (recordName: string, fieldId: string) => void;
+  onRenameRecord: (oldName: string, newName: string, namespace?: string) => void;
+  onRemoveRecord: (name: string, namespace?: string) => void;
+  onUpdateRecordNamespace?: (recordName: string, newNamespace: string, currentNamespace?: string) => void;
+  onRenameField: (recordName: string, fieldId: string, newName: string, recordNamespace?: string) => void;
+  onUpdateFieldType: (recordName: string, fieldId: string, newType: AvroSchemaType, recordNamespace?: string) => void;
+  onRemoveField: (recordName: string, fieldId: string, recordNamespace?: string) => void;
   onStartLinking?: (fieldId: string, isOriginal: boolean) => void;
   onLinkField?: (targetFieldId: string) => void;
   onUnlink?: (fieldId: string) => void;
-  handleCreateField: (recordName: string) => void;
+  handleCreateField: (recordName: string, recordNamespace?: string) => void;
 }
 
 const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
@@ -67,6 +69,7 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
   setNewFieldType,
   onRenameRecord,
   onRemoveRecord,
+  onUpdateRecordNamespace,
   onRenameField,
   onUpdateFieldType,
   onRemoveField,
@@ -75,11 +78,30 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
   onUnlink,
   handleCreateField,
 }) => {
+  const [isEditingNs, setIsEditingNs] = useState(false);
+  const [nsInput, setNsInput] = useState(record.namespace || '');
+
+  React.useEffect(() => {
+    setNsInput(record.namespace || '');
+  }, [record.namespace]);
+
+  const handleNsSubmit = () => {
+    setIsEditingNs(false);
+    if (onUpdateRecordNamespace && nsInput.trim() !== (record.namespace || '')) {
+      onUpdateRecordNamespace(record.name, nsInput.trim(), record.namespace);
+    } else {
+      setNsInput(record.namespace || '');
+    }
+  };
+
+  const recordKey = record.namespace ? `${record.namespace}.${record.name}` : record.name;
+
   const { setNodeRef, isOver } = useDroppable({
-    id: 'drop-rec-' + record.name,
+    id: 'drop-rec-' + recordKey,
     data: {
       type: 'record-droppable',
       recordName: record.name,
+      recordNamespace: record.namespace,
     },
   });
 
@@ -98,6 +120,35 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
       <div className="bg-gray-800/80 px-4 py-2.5 border-b border-gray-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-sm text-gray-200">{record.name}</span>
+
+          {/* Editable record namespace input badge */}
+          {isEditingNs ? (
+            <input
+              type="text"
+              placeholder="namespace..."
+              value={nsInput}
+              onChange={(e) => setNsInput(e.target.value)}
+              onBlur={handleNsSubmit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleNsSubmit();
+                if (e.key === 'Escape') {
+                  setNsInput(record.namespace || '');
+                  setIsEditingNs(false);
+                }
+              }}
+              autoFocus
+              className="bg-gray-900 text-[11px] font-mono text-gray-300 px-1.5 py-0.5 rounded border border-indigo-500 focus:outline-none"
+            />
+          ) : (
+            <button
+              onClick={() => setIsEditingNs(true)}
+              className="text-[11px] font-mono text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 px-1.5 py-0.5 rounded transition"
+              title="Click to edit record namespace"
+            >
+              {record.namespace || 'add namespace'}
+            </button>
+          )}
+
           <span className="text-xs text-gray-500 font-mono">
             ({record.fields.length} {record.fields.length === 1 ? 'field' : 'fields'})
           </span>
@@ -113,7 +164,7 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
             onClick={() => {
               const newName = window.prompt('Rename record to:', record.name);
               if (newName && newName.trim() && newName !== record.name) {
-                onRenameRecord(record.name, newName.trim());
+                onRenameRecord(record.name, newName.trim(), record.namespace);
               }
             }}
             className="p-1 text-gray-400 hover:text-gray-200 transition"
@@ -122,7 +173,7 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
             <Edit3 className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => onRemoveRecord(record.name)}
+            onClick={() => onRemoveRecord(record.name, record.namespace)}
             className="p-1 text-gray-400 hover:text-rose-400 transition"
             title="Delete record"
           >
@@ -139,6 +190,8 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
             const isLinkingActive = !!linkingFieldId;
             const isSelfLinking = linkingFieldId === field.id;
 
+            const existingFieldNames = record.fields.map((f) => f.name);
+
             return (
               <SortableField
                 key={field.id}
@@ -148,15 +201,16 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
                 linkedPartner={linkedPartner}
                 isLinkingActive={isLinkingActive}
                 isSelfLinking={isSelfLinking}
-                onRename={(newName) => onRenameField(record.name, field.id, newName)}
+                onRename={(newName) => onRenameField(record.name, field.id, newName, record.namespace)}
                 onUpdateType={(newType) =>
-                  onUpdateFieldType(record.name, field.id, newType)
+                  onUpdateFieldType(record.name, field.id, newType, record.namespace)
                 }
-                onRemove={() => onRemoveField(record.name, field.id)}
+                onRemove={() => onRemoveField(record.name, field.id, record.namespace)}
                 onStartLinking={onStartLinking ? () => onStartLinking(field.id, false) : undefined}
                 onLinkToThis={onLinkField ? () => onLinkField(field.id) : undefined}
                 onUnlink={onUnlink && linkedPartner ? () => onUnlink(field.id) : undefined}
                 availableNamedTypes={availableNamedTypes}
+                existingFieldNames={existingFieldNames}
               />
             );
           })}
@@ -169,54 +223,67 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
         )}
 
         {/* Add Field Inline Form */}
-        {addingFieldRecord === record.name ? (
-          <div className="flex items-center gap-2 p-2 bg-gray-800/80 rounded-lg border border-gray-700 text-xs mt-2">
-            <input
-              type="text"
-              placeholder="Field name..."
-              value={newFieldName}
-              onChange={(e) => setNewFieldName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateField(record.name);
-                if (e.key === 'Escape') setAddingFieldRecord(null);
-              }}
-              autoFocus
-              className="bg-gray-900 text-gray-100 font-mono px-2 py-1 rounded border border-indigo-500 focus:outline-none flex-1"
-            />
-            <select
-              value={typeof newFieldType === 'string' ? newFieldType : 'string'}
-              onChange={(e) => setNewFieldType(e.target.value as AvroSchemaType)}
-              className="bg-gray-900 text-indigo-400 font-mono px-2 py-1 rounded border border-gray-700 focus:outline-none"
-            >
-              <option value="string">string</option>
-              <option value="int">int</option>
-              <option value="long">long</option>
-              <option value="double">double</option>
-              <option value="boolean">boolean</option>
-              <option value="bytes">bytes</option>
-              {availableNamedTypes.map((nt) => (
-                <option key={nt} value={nt}>
-                  {nt}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => handleCreateField(record.name)}
-              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium"
-            >
-              Add
-            </button>
-            <button
-              onClick={() => setAddingFieldRecord(null)}
-              className="px-2 py-1 text-gray-400 hover:text-white"
-            >
-              Cancel
-            </button>
+        {addingFieldRecord === recordKey ? (
+          <div className="relative mt-2">
+            <div className="flex items-center gap-2 p-2 bg-gray-800/80 rounded-lg border border-gray-700 text-xs">
+              <input
+                type="text"
+                placeholder="Field name..."
+                value={newFieldName}
+                onChange={(e) => {
+                  setNewFieldName(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateField(record.name, record.namespace);
+                  if (e.key === 'Escape') setAddingFieldRecord(null);
+                }}
+                autoFocus
+                className={`bg-gray-900 text-gray-100 font-mono px-2 py-1 rounded border focus:outline-none flex-1 ${
+                  record.fields.some((f) => f.name.toLowerCase() === newFieldName.trim().toLowerCase())
+                    ? 'border-rose-500 ring-1 ring-rose-500'
+                    : 'border-indigo-500'
+                }`}
+              />
+              <select
+                value={typeof newFieldType === 'string' ? newFieldType : 'string'}
+                onChange={(e) => setNewFieldType(e.target.value as AvroSchemaType)}
+                className="bg-gray-900 text-indigo-400 font-mono px-2 py-1 rounded border border-gray-700 focus:outline-none"
+              >
+                <option value="string">string</option>
+                <option value="int">int</option>
+                <option value="long">long</option>
+                <option value="double">double</option>
+                <option value="boolean">boolean</option>
+                <option value="bytes">bytes</option>
+                {availableNamedTypes.map((nt) => (
+                  <option key={nt} value={nt}>
+                    {nt}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => handleCreateField(record.name, record.namespace)}
+                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium"
+              >
+                Add
+              </button>
+              <button
+                onClick={() => setAddingFieldRecord(null)}
+                className="px-2 py-1 text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+            {record.fields.some((f) => f.name.toLowerCase() === newFieldName.trim().toLowerCase()) && (
+              <div className="absolute -top-7 left-2 z-20 px-2 py-0.5 text-[10px] font-medium bg-rose-950 text-rose-300 border border-rose-800 rounded shadow-md whitespace-nowrap">
+                Field '{newFieldName.trim()}' already exists in record '{record.name}'
+              </div>
+            )}
           </div>
         ) : (
           <button
             onClick={() => {
-              setAddingFieldRecord(record.name);
+              setAddingFieldRecord(recordKey);
               setNewFieldName('');
             }}
             className="w-full py-2 flex items-center justify-center gap-1 text-xs text-gray-400 hover:text-indigo-400 border border-dashed border-gray-800 hover:border-gray-700 rounded-lg transition"
@@ -247,8 +314,10 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   onAddRecord,
   onRemoveRecord,
   onRenameRecord,
+  onUpdateRecordNamespace,
 }) => {
   const [newRecordName, setNewRecordName] = useState('');
+  const [newRecordNamespace, setNewRecordNamespace] = useState('');
   const [isAddingRecord, setIsAddingRecord] = useState(false);
   const [addingFieldRecord, setAddingFieldRecord] = useState<string | null>(null);
   const [newFieldName, setNewFieldName] = useState('');
@@ -269,15 +338,16 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
 
   const handleCreateRecord = () => {
     if (newRecordName.trim()) {
-      onAddRecord(newRecordName.trim());
+      onAddRecord(newRecordName.trim(), newRecordNamespace.trim() || undefined);
       setNewRecordName('');
+      setNewRecordNamespace('');
       setIsAddingRecord(false);
     }
   };
 
-  const handleCreateField = (recordName: string) => {
+  const handleCreateField = (recordName: string, recordNamespace?: string) => {
     if (newFieldName.trim()) {
-      onAddField(recordName, newFieldName.trim(), newFieldType);
+      onAddField(recordName, newFieldName.trim(), newFieldType, recordNamespace);
       setNewFieldName('');
       setAddingFieldRecord(null);
     }
@@ -317,6 +387,17 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
               autoFocus
               className="bg-gray-800 text-xs px-2.5 py-1 rounded border border-emerald-500 text-gray-100 focus:outline-none"
             />
+            <input
+              type="text"
+              placeholder="namespace (optional)..."
+              value={newRecordNamespace}
+              onChange={(e) => setNewRecordNamespace(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateRecord();
+                if (e.key === 'Escape') setIsAddingRecord(false);
+              }}
+              className="bg-gray-800 text-xs px-2.5 py-1 rounded border border-gray-700 font-mono text-gray-300 focus:outline-none w-36"
+            />
             <button
               onClick={handleCreateRecord}
               className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs"
@@ -338,10 +419,11 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
         {protocol.types.map((typeDef) => {
           if (!isRecordType(typeDef)) return null;
           const record = typeDef as AvroRecordType;
+          const recordKey = record.namespace ? `${record.namespace}.${record.name}` : record.name;
 
           return (
             <DroppableRecordCard
-              key={record.name}
+              key={recordKey}
               record={record}
               availableNamedTypes={availableNamedTypes}
               annotations={annotations}
@@ -355,6 +437,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
               setNewFieldType={setNewFieldType}
               onRenameRecord={onRenameRecord}
               onRemoveRecord={onRemoveRecord}
+              onUpdateRecordNamespace={onUpdateRecordNamespace}
               onRenameField={onRenameField}
               onUpdateFieldType={onUpdateFieldType}
               onRemoveField={onRemoveField}

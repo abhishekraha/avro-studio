@@ -14,6 +14,7 @@ import {
   Code2,
   User,
   FileCode2,
+  Tag,
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -37,6 +38,8 @@ export interface HeaderProps {
   onOpenWorkspaceModal?: () => void;
   userId?: string | null;
   onOpenUserModal?: () => void;
+  schemaVersion?: string;
+  onUpdateSchemaVersion?: (version: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -59,13 +62,21 @@ export const Header: React.FC<HeaderProps> = ({
   onNewWorkspace,
   userId,
   onOpenUserModal,
+  schemaVersion,
+  onUpdateSchemaVersion,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = React.useState(false);
   const [titleInput, setTitleInput] = React.useState(workspaceName);
+  const [isEditingVersion, setIsEditingVersion] = React.useState(false);
+  const [versionInput, setVersionInput] = React.useState(schemaVersion || '');
 
   React.useEffect(() => {
     setTitleInput(workspaceName);
   }, [workspaceName]);
+
+  React.useEffect(() => {
+    setVersionInput(schemaVersion || '');
+  }, [schemaVersion]);
 
   const handleTitleSubmit = () => {
     setIsEditingTitle(false);
@@ -74,6 +85,36 @@ export const Header: React.FC<HeaderProps> = ({
     } else {
       setTitleInput(workspaceName);
     }
+  };
+
+  const handleVersionSubmit = () => {
+    setIsEditingVersion(false);
+    if (onUpdateSchemaVersion && versionInput.trim() !== (schemaVersion || '')) {
+      onUpdateSchemaVersion(versionInput.trim());
+    } else {
+      setVersionInput(schemaVersion || '');
+    }
+  };
+
+  const bumpVersion = (type: 'patch' | 'minor' | 'major') => {
+    if (!onUpdateSchemaVersion) return;
+    const current = schemaVersion || '1.0.0';
+    const clean = current.replace(/^v/i, '');
+    const parts = clean.split('.').map((p) => parseInt(p, 10) || 0);
+    while (parts.length < 3) parts.push(0);
+
+    if (type === 'major') {
+      parts[0] += 1;
+      parts[1] = 0;
+      parts[2] = 0;
+    } else if (type === 'minor') {
+      parts[1] += 1;
+      parts[2] = 0;
+    } else if (type === 'patch') {
+      parts[2] += 1;
+    }
+    const nextVer = parts.slice(0, 3).join('.');
+    onUpdateSchemaVersion(nextVer);
   };
 
   return (
@@ -131,6 +172,63 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </>
           ) : null}
+        </div>
+
+        {/* Schema Version Badge & Quick Bump Controls */}
+        <div className="flex items-center gap-1 ml-2 bg-gray-950 px-2 py-0.5 rounded border border-gray-800">
+          <Tag className="w-3 h-3 text-indigo-400" />
+          {isEditingVersion ? (
+            <input
+              type="text"
+              placeholder="e.g. 1.0.0"
+              className="bg-gray-800 text-gray-100 text-xs px-1.5 py-0.5 rounded border border-indigo-500 font-mono focus:outline-none w-20"
+              value={versionInput}
+              onChange={(e) => setVersionInput(e.target.value)}
+              onBlur={handleVersionSubmit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleVersionSubmit();
+                if (e.key === 'Escape') {
+                  setVersionInput(schemaVersion || '');
+                  setIsEditingVersion(false);
+                }
+              }}
+              autoFocus
+            />
+          ) : (
+            <button
+              onClick={() => setIsEditingVersion(true)}
+              className="text-xs font-mono font-semibold text-indigo-300 hover:text-indigo-200 transition"
+              title="Click to edit schema version"
+            >
+              {`v${schemaVersion || '1.0.0'}`}
+            </button>
+          )}
+
+          {onUpdateSchemaVersion && (
+            <div className="flex items-center gap-0.5 ml-1 border-l border-gray-800 pl-1">
+              <button
+                onClick={() => bumpVersion('patch')}
+                className="px-1 py-0.5 text-[9px] font-mono text-gray-400 hover:text-indigo-300 hover:bg-gray-800 rounded transition"
+                title="Bump patch (+0.0.1)"
+              >
+                +patch
+              </button>
+              <button
+                onClick={() => bumpVersion('minor')}
+                className="px-1 py-0.5 text-[9px] font-mono text-gray-400 hover:text-indigo-300 hover:bg-gray-800 rounded transition"
+                title="Bump minor (+0.1.0)"
+              >
+                +minor
+              </button>
+              <button
+                onClick={() => bumpVersion('major')}
+                className="px-1 py-0.5 text-[9px] font-mono text-gray-400 hover:text-indigo-300 hover:bg-gray-800 rounded transition"
+                title="Bump major (+1.0.0)"
+              >
+                +major
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

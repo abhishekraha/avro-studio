@@ -15,6 +15,11 @@ export interface SchemaStateOptions {
   debounceMs?: number;
 }
 
+export interface CopyRecordResult {
+  record: AvroRecordType;
+  createdLinks: Array<[string, string]>; // [editedFieldId, originalFieldId]
+}
+
 export interface UseSchemaStateReturn {
   original: AvroProtocol | null;
   edited: AvroProtocol | null;
@@ -22,17 +27,20 @@ export interface UseSchemaStateReturn {
   canRedo: boolean;
   isDirty: boolean;
   setProtocol: (protocol: AvroProtocol | null) => void;
-  addField: (recordName: string, field: Omit<AvroField, 'id'> & { id?: string }, index?: number) => void;
-  removeField: (recordName: string, fieldId: string) => void;
-  renameField: (recordName: string, fieldId: string, newName: string) => void;
-  updateFieldType: (recordName: string, fieldId: string, newType: AvroSchemaType) => void;
-  updateFieldDoc: (recordName: string, fieldId: string, newDoc?: string) => void;
-  updateFieldDefault: (recordName: string, fieldId: string, newDefault: unknown) => void;
+  setSchemaVersion: (version: string) => void;
+  updateRecordNamespace: (recordName: string, namespace: string, currentNamespace?: string) => void;
+  addField: (recordName: string, field: Omit<AvroField, 'id'> & { id?: string }, index?: number, recordNamespace?: string) => void;
+  removeField: (recordName: string, fieldId: string, recordNamespace?: string) => void;
+  renameField: (recordName: string, fieldId: string, newName: string, recordNamespace?: string) => void;
+  updateFieldType: (recordName: string, fieldId: string, newType: AvroSchemaType, recordNamespace?: string) => void;
+  updateFieldDoc: (recordName: string, fieldId: string, newDoc?: string, recordNamespace?: string) => void;
+  updateFieldDefault: (recordName: string, fieldId: string, newDefault: unknown, recordNamespace?: string) => void;
   moveField: (params: MoveFieldParams) => void;
-  reorderField: (recordName: string, oldIndex: number, newIndex: number) => void;
+  reorderField: (recordName: string, oldIndex: number, newIndex: number, recordNamespace?: string) => void;
   addRecord: (recordName: string, namespace?: string, doc?: string) => void;
-  removeRecord: (recordName: string) => void;
-  renameRecord: (oldName: string, newName: string) => void;
+  copyRecordFromOriginal: (record: AvroRecordType, targetName?: string) => CopyRecordResult;
+  removeRecord: (recordName: string, recordNamespace?: string) => void;
+  renameRecord: (oldName: string, newName: string, recordNamespace?: string) => void;
   undo: () => void;
   redo: () => void;
   reset: () => void;
@@ -107,18 +115,72 @@ export class SchemaStateManager {
     this.historyIndex = 0;
   }
 
+  public setSchemaVersion(version: string): void {
+    if (!this.current) return;
+    const next = structuredClone(this.current);
+    const trimmed = version.trim();
+    if (trimmed) {
+      next.schemaVersion = trimmed;
+    } else {
+      delete next.schemaVersion;
+    }
+    this.pushState(next);
+  }
+
+  /**
+   * Helper to find a record matching either full qualified name, or name + namespace.
+   */
+  private findRecord(protocol: AvroProtocol, recordName: string, namespace?: string): AvroRecordType | undefined {
+    return protocol.types.find((t) => {
+      if (!isRecordType(t)) return false;
+      const recNamespace = t.namespace || protocol.namespace;
+      const fullQualified = recNamespace ? `${recNamespace}.${t.name}` : t.name;
+
+      if (recordName === fullQualified) return true;
+      if (t.name === recordName) {
+        if (namespace !== undefined) {
+          return t.namespace === namespace || (!t.namespace && namespace === protocol.namespace);
+        }
+        return true;
+      }
+      return false;
+    }) as AvroRecordType | undefined;
+  }
+
+  public updateRecordNamespace(recordName: string, newNamespace: string, currentNamespace?: string): void {
+    if (!this.current) return;
+    const next = structuredClone(this.current);
+    const rec = this.findRecord(next, recordName, currentNamespace);
+    if (!rec) return;
+
+    const trimmed = newNamespace.trim();
+    if (trimmed) {
+      rec.namespace = trimmed;
+    } else {
+      delete rec.namespace;
+    }
+    this.pushState(next);
+  }
+
   public addField(
     recordName: string,
     fieldData: Omit<AvroField, 'id'> & { id?: string },
-    index?: number
+    index?: number,
+    recordNamespace?: string
   ): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as AvroRecordType | undefined;
+    const rec = this.findRecord(next, recordName, recordNamespace);
     if (!rec) return;
+
+    const trimmedName = fieldData.name.trim();
+    if (rec.fields.some((f) => f.name.toLowerCase() === trimmedName.toLowerCase())) {
+      throw new Error(`Field '${trimmedName}' already exists in record '${recordName}'`);
+    }
 
     const newField: AvroField = {
       ...fieldData,
+      name: trimmedName,
       id: fieldData.id || this.generateId(),
     };
 
@@ -131,33 +193,42 @@ export class SchemaStateManager {
     this.pushState(next);
   }
 
-  public removeField(recordName: string, fieldId: string): void {
+  public removeField(recordName: string, fieldId: string, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as AvroRecordType | undefined;
+    const rec = this.findRecord(next, recordName, recordNamespace);
     if (!rec) return;
 
     rec.fields = rec.fields.filter((f) => f.id !== fieldId);
     this.pushState(next);
   }
 
-  public renameField(recordName: string, fieldId: string, newName: string): void {
+  public renameField(recordName: string, fieldId: string, newName: string, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as AvroRecordType | undefined;
+    const rec = this.findRecord(next, recordName, recordNamespace);
     if (!rec) return;
 
     const targetField = rec.fields.find((f) => f.id === fieldId);
     if (!targetField) return;
 
-    targetField.name = newName;
+    const trimmedName = newName.trim();
+    if (
+      rec.fields.some(
+        (f) => f.id !== fieldId && f.name.toLowerCase() === trimmedName.toLowerCase()
+      )
+    ) {
+      throw new Error(`Field '${trimmedName}' already exists in record '${recordName}'`);
+    }
+
+    targetField.name = trimmedName;
     this.pushState(next);
   }
 
-  public updateFieldType(recordName: string, fieldId: string, newType: AvroSchemaType): void {
+  public updateFieldType(recordName: string, fieldId: string, newType: AvroSchemaType, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as AvroRecordType | undefined;
+    const rec = this.findRecord(next, recordName, recordNamespace);
     if (!rec) return;
 
     const targetField = rec.fields.find((f) => f.id === fieldId);
@@ -167,10 +238,10 @@ export class SchemaStateManager {
     this.pushState(next);
   }
 
-  public updateFieldDoc(recordName: string, fieldId: string, newDoc?: string): void {
+  public updateFieldDoc(recordName: string, fieldId: string, newDoc?: string, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as AvroRecordType | undefined;
+    const rec = this.findRecord(next, recordName, recordNamespace);
     if (!rec) return;
 
     const targetField = rec.fields.find((f) => f.id === fieldId);
@@ -184,10 +255,10 @@ export class SchemaStateManager {
     this.pushState(next);
   }
 
-  public updateFieldDefault(recordName: string, fieldId: string, newDefault: unknown): void {
+  public updateFieldDefault(recordName: string, fieldId: string, newDefault: unknown, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as AvroRecordType | undefined;
+    const rec = this.findRecord(next, recordName, recordNamespace);
     if (!rec) return;
 
     const targetField = rec.fields.find((f) => f.id === fieldId);
@@ -206,12 +277,8 @@ export class SchemaStateManager {
     if (!this.current) return;
     const next = structuredClone(this.current);
 
-    const sourceRec = next.types.find(
-      (t) => isRecordType(t) && t.name === sourceRecordName
-    ) as AvroRecordType | undefined;
-    const targetRec = next.types.find(
-      (t) => isRecordType(t) && t.name === targetRecordName
-    ) as AvroRecordType | undefined;
+    const sourceRec = this.findRecord(next, sourceRecordName);
+    const targetRec = this.findRecord(next, targetRecordName);
 
     if (!sourceRec || !targetRec) return;
 
@@ -220,7 +287,7 @@ export class SchemaStateManager {
 
     const [field] = sourceRec.fields.splice(fieldIdx, 1);
 
-    if (sourceRecordName === targetRecordName) {
+    if (sourceRec === targetRec) {
       const dest = targetIndex !== undefined ? targetIndex : sourceRec.fields.length;
       sourceRec.fields.splice(dest, 0, field);
     } else {
@@ -231,10 +298,10 @@ export class SchemaStateManager {
     this.pushState(next);
   }
 
-  public reorderField(recordName: string, oldIndex: number, newIndex: number): void {
+  public reorderField(recordName: string, oldIndex: number, newIndex: number, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as AvroRecordType | undefined;
+    const rec = this.findRecord(next, recordName, recordNamespace);
     if (!rec) return;
 
     if (oldIndex < 0 || oldIndex >= rec.fields.length) return;
@@ -260,17 +327,73 @@ export class SchemaStateManager {
     this.pushState(next);
   }
 
-  public removeRecord(recordName: string): void {
+  public copyRecordFromOriginal(record: AvroRecordType, targetName?: string): CopyRecordResult {
+    if (!this.current) {
+      throw new Error('No current schema loaded');
+    }
+    const next = structuredClone(this.current);
+    const finalName = targetName || record.name;
+    const createdLinks: Array<[string, string]> = [];
+
+    const clonedFields: AvroField[] = record.fields.map((f) => {
+      const freshId = `g-${Math.random().toString(36).substring(2, 6)}`;
+      createdLinks.push([freshId, f.id]);
+      return {
+        ...structuredClone(f),
+        id: freshId,
+      };
+    });
+
+    const newRecord: AvroRecordType = {
+      type: 'record',
+      name: finalName,
+      ...(record.namespace ? { namespace: record.namespace } : {}),
+      ...(record.doc ? { doc: record.doc } : {}),
+      fields: clonedFields,
+    };
+
+    // If a record with this full qualified name already exists, replace it or push
+    const targetNs = record.namespace || next.namespace;
+    const existingIdx = next.types.findIndex(
+      (t) =>
+        isRecordType(t) &&
+        t.name === finalName &&
+        (t.namespace || next.namespace) === targetNs
+    );
+    if (existingIdx >= 0) {
+      next.types[existingIdx] = newRecord;
+    } else {
+      next.types.push(newRecord);
+    }
+
+    this.pushState(next);
+    return { record: newRecord, createdLinks };
+  }
+
+  public removeRecord(recordName: string, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    next.types = next.types.filter((t) => t.name !== recordName);
+    next.types = next.types.filter((t) => {
+      if (!isRecordType(t)) return true;
+      const recNamespace = t.namespace || next.namespace;
+      const fullQualified = recNamespace ? `${recNamespace}.${t.name}` : t.name;
+
+      if (recordName === fullQualified) return false;
+      if (t.name === recordName) {
+        if (recordNamespace !== undefined) {
+          return !(t.namespace === recordNamespace || (!t.namespace && recordNamespace === next.namespace));
+        }
+        return false;
+      }
+      return true;
+    });
     this.pushState(next);
   }
 
-  public renameRecord(oldName: string, newName: string): void {
+  public renameRecord(oldName: string, newName: string, recordNamespace?: string): void {
     if (!this.current) return;
     const next = structuredClone(this.current);
-    const rec = next.types.find((t) => t.name === oldName);
+    const rec = this.findRecord(next, oldName, recordNamespace);
     if (rec) {
       rec.name = newName;
       this.pushState(next);
@@ -371,17 +494,79 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
     setHistoryIndex(0);
   }, []);
 
-  const addField = useCallback(
-    (recordName: string, fieldData: Omit<AvroField, 'id'> & { id?: string }, index?: number) => {
+  const setSchemaVersion = useCallback(
+    (version: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as
-        | AvroRecordType
-        | undefined;
+      const trimmed = version.trim();
+      if (trimmed) {
+        next.schemaVersion = trimmed;
+      } else {
+        delete next.schemaVersion;
+      }
+      commitNextState(next);
+    },
+    [edited, commitNextState]
+  );
+
+  const findRecord = useCallback(
+    (protocol: AvroProtocol, recordName: string, namespace?: string): AvroRecordType | undefined => {
+      return protocol.types.find((t) => {
+        if (!isRecordType(t)) return false;
+        const recNamespace = t.namespace || protocol.namespace;
+        const fullQualified = recNamespace ? `${recNamespace}.${t.name}` : t.name;
+
+        if (recordName === fullQualified) return true;
+        if (t.name === recordName) {
+          if (namespace !== undefined) {
+            return t.namespace === namespace || (!t.namespace && namespace === protocol.namespace);
+          }
+          return true;
+        }
+        return false;
+      }) as AvroRecordType | undefined;
+    },
+    []
+  );
+
+  const updateRecordNamespace = useCallback(
+    (recordName: string, newNamespace: string, currentNamespace?: string) => {
+      if (!edited) return;
+      const next = structuredClone(edited);
+      const rec = findRecord(next, recordName, currentNamespace);
       if (!rec) return;
+
+      const trimmed = newNamespace.trim();
+      if (trimmed) {
+        rec.namespace = trimmed;
+      } else {
+        delete rec.namespace;
+      }
+      commitNextState(next);
+    },
+    [edited, commitNextState, findRecord]
+  );
+
+  const addField = useCallback(
+    (
+      recordName: string,
+      fieldData: Omit<AvroField, 'id'> & { id?: string },
+      index?: number,
+      recordNamespace?: string
+    ) => {
+      if (!edited) return;
+      const next = structuredClone(edited);
+      const rec = findRecord(next, recordName, recordNamespace);
+      if (!rec) return;
+
+      const trimmedName = fieldData.name.trim();
+      if (rec.fields.some((f) => f.name.toLowerCase() === trimmedName.toLowerCase())) {
+        throw new Error(`Field '${trimmedName}' already exists in record '${recordName}'`);
+      }
 
       const newField: AvroField = {
         ...fieldData,
+        name: trimmedName,
         id: fieldData.id || generateId(),
       };
 
@@ -393,49 +578,52 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
 
       commitNextState(next);
     },
-    [edited, commitNextState, generateId]
+    [edited, commitNextState, generateId, findRecord]
   );
 
   const removeField = useCallback(
-    (recordName: string, fieldId: string) => {
+    (recordName: string, fieldId: string, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as
-        | AvroRecordType
-        | undefined;
+      const rec = findRecord(next, recordName, recordNamespace);
       if (!rec) return;
 
       rec.fields = rec.fields.filter((f) => f.id !== fieldId);
       commitNextState(next);
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const renameField = useCallback(
-    (recordName: string, fieldId: string, newName: string) => {
+    (recordName: string, fieldId: string, newName: string, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as
-        | AvroRecordType
-        | undefined;
+      const rec = findRecord(next, recordName, recordNamespace);
       if (!rec) return;
 
       const field = rec.fields.find((f) => f.id === fieldId);
       if (!field) return;
 
-      field.name = newName;
+      const trimmedName = newName.trim();
+      if (
+        rec.fields.some(
+          (f) => f.id !== fieldId && f.name.toLowerCase() === trimmedName.toLowerCase()
+        )
+      ) {
+        throw new Error(`Field '${trimmedName}' already exists in record '${recordName}'`);
+      }
+
+      field.name = trimmedName;
       commitNextState(next);
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const updateFieldType = useCallback(
-    (recordName: string, fieldId: string, newType: AvroSchemaType) => {
+    (recordName: string, fieldId: string, newType: AvroSchemaType, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as
-        | AvroRecordType
-        | undefined;
+      const rec = findRecord(next, recordName, recordNamespace);
       if (!rec) return;
 
       const field = rec.fields.find((f) => f.id === fieldId);
@@ -444,16 +632,14 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
       field.type = newType;
       commitNextState(next);
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const updateFieldDoc = useCallback(
-    (recordName: string, fieldId: string, newDoc?: string) => {
+    (recordName: string, fieldId: string, newDoc?: string, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as
-        | AvroRecordType
-        | undefined;
+      const rec = findRecord(next, recordName, recordNamespace);
       if (!rec) return;
 
       const field = rec.fields.find((f) => f.id === fieldId);
@@ -466,16 +652,14 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
       }
       commitNextState(next);
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const updateFieldDefault = useCallback(
-    (recordName: string, fieldId: string, newDefault: unknown) => {
+    (recordName: string, fieldId: string, newDefault: unknown, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as
-        | AvroRecordType
-        | undefined;
+      const rec = findRecord(next, recordName, recordNamespace);
       if (!rec) return;
 
       const field = rec.fields.find((f) => f.id === fieldId);
@@ -488,7 +672,7 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
       }
       commitNextState(next);
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const moveField = useCallback(
@@ -497,12 +681,8 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
       if (!edited) return;
       const next = structuredClone(edited);
 
-      const sourceRec = next.types.find(
-        (t) => isRecordType(t) && t.name === sourceRecordName
-      ) as AvroRecordType | undefined;
-      const targetRec = next.types.find(
-        (t) => isRecordType(t) && t.name === targetRecordName
-      ) as AvroRecordType | undefined;
+      const sourceRec = findRecord(next, sourceRecordName);
+      const targetRec = findRecord(next, targetRecordName);
 
       if (!sourceRec || !targetRec) return;
 
@@ -511,7 +691,7 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
 
       const [field] = sourceRec.fields.splice(fieldIdx, 1);
 
-      if (sourceRecordName === targetRecordName) {
+      if (sourceRec === targetRec) {
         const dest = targetIndex !== undefined ? targetIndex : sourceRec.fields.length;
         sourceRec.fields.splice(dest, 0, field);
       } else {
@@ -521,16 +701,14 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
 
       commitNextState(next);
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const reorderField = useCallback(
-    (recordName: string, oldIndex: number, newIndex: number) => {
+    (recordName: string, oldIndex: number, newIndex: number, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => isRecordType(t) && t.name === recordName) as
-        | AvroRecordType
-        | undefined;
+      const rec = findRecord(next, recordName, recordNamespace);
       if (!rec) return;
 
       if (oldIndex < 0 || oldIndex >= rec.fields.length) return;
@@ -541,7 +719,7 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
 
       commitNextState(next);
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const addRecord = useCallback(
@@ -561,27 +739,85 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
     [edited, commitNextState]
   );
 
+  const copyRecordFromOriginal = useCallback(
+    (record: AvroRecordType, targetName?: string): CopyRecordResult => {
+      if (!edited) {
+        throw new Error('No current schema loaded');
+      }
+      const next = structuredClone(edited);
+      const finalName = targetName || record.name;
+      const createdLinks: Array<[string, string]> = [];
+
+      const clonedFields: AvroField[] = record.fields.map((f) => {
+        const freshId = `g-${Math.random().toString(36).substring(2, 6)}`;
+        createdLinks.push([freshId, f.id]);
+        return {
+          ...structuredClone(f),
+          id: freshId,
+        };
+      });
+
+      const newRecord: AvroRecordType = {
+        type: 'record',
+        name: finalName,
+        ...(record.namespace ? { namespace: record.namespace } : {}),
+        ...(record.doc ? { doc: record.doc } : {}),
+        fields: clonedFields,
+      };
+
+      const targetNs = record.namespace || next.namespace;
+      const existingIdx = next.types.findIndex(
+        (t) =>
+          isRecordType(t) &&
+          t.name === finalName &&
+          (t.namespace || next.namespace) === targetNs
+      );
+      if (existingIdx >= 0) {
+        next.types[existingIdx] = newRecord;
+      } else {
+        next.types.push(newRecord);
+      }
+
+      commitNextState(next);
+      return { record: newRecord, createdLinks };
+    },
+    [edited, commitNextState]
+  );
+
   const removeRecord = useCallback(
-    (recordName: string) => {
+    (recordName: string, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      next.types = next.types.filter((t) => t.name !== recordName);
+      next.types = next.types.filter((t) => {
+        if (!isRecordType(t)) return true;
+        const recNamespace = t.namespace || next.namespace;
+        const fullQualified = recNamespace ? `${recNamespace}.${t.name}` : t.name;
+
+        if (recordName === fullQualified) return false;
+        if (t.name === recordName) {
+          if (recordNamespace !== undefined) {
+            return !(t.namespace === recordNamespace || (!t.namespace && recordNamespace === next.namespace));
+          }
+          return false;
+        }
+        return true;
+      });
       commitNextState(next);
     },
     [edited, commitNextState]
   );
 
   const renameRecord = useCallback(
-    (oldName: string, newName: string) => {
+    (oldName: string, newName: string, recordNamespace?: string) => {
       if (!edited) return;
       const next = structuredClone(edited);
-      const rec = next.types.find((t) => t.name === oldName);
+      const rec = findRecord(next, oldName, recordNamespace);
       if (rec) {
         rec.name = newName;
         commitNextState(next);
       }
     },
-    [edited, commitNextState]
+    [edited, commitNextState, findRecord]
   );
 
   const undo = useCallback(() => {
@@ -610,6 +846,8 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
     canRedo,
     isDirty,
     setProtocol,
+    setSchemaVersion,
+    updateRecordNamespace,
     addField,
     removeField,
     renameField,
@@ -619,6 +857,7 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
     moveField,
     reorderField,
     addRecord,
+    copyRecordFromOriginal,
     removeRecord,
     renameRecord,
     undo,

@@ -171,11 +171,60 @@ export function App() {
     });
   }, [schemaState.edited]);
 
-  // Track manual linking mode state
-  const [linkingState, setLinkingState] = useState<{
-    fieldId: string;
-    isOriginal: boolean;
-  } | null>(null);
+  // Global keyboard shortcuts: Undo, Redo, and Escape modal closer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape key: close all open modals immediately
+      if (e.key === 'Escape') {
+        setIsBqModalOpen(false);
+        setIsReconModalOpen(false);
+        setIsLinkagesModalOpen(false);
+        setIsImportModalOpen(false);
+        setIsAvdlPreviewOpen(false);
+        setIsContractSchemaOpen(false);
+        setIsUserModalOpen(false);
+        return;
+      }
+
+      // Don't intercept undo/redo if user is typing inside an input/textarea
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (!modKey) return;
+
+      // Undo: Ctrl+Z / Cmd+Z (without Shift)
+      if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (schemaState.canUndo) {
+          schemaState.undo();
+        }
+      }
+
+      // Redo: Ctrl+Y / Cmd+Y OR Ctrl+Shift+Z / Cmd+Shift+Z
+      if (
+        (e.key.toLowerCase() === 'y' && !e.shiftKey) ||
+        (e.key.toLowerCase() === 'z' && e.shiftKey)
+      ) {
+        e.preventDefault();
+        if (schemaState.canRedo) {
+          schemaState.redo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [schemaState]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -193,8 +242,9 @@ export function App() {
     const orig = activeContract?.original ?? schemaState.original;
     const edit = schemaState.edited;
     const links = activeContract?.manualLinks;
-    return computeDiff(orig, edit, links);
-  }, [activeContract?.original, schemaState.original, schemaState.edited, activeContract?.manualLinks]);
+    const recordLinks = activeContract?.recordLinks;
+    return computeDiff(orig, edit, links, recordLinks);
+  }, [activeContract?.original, schemaState.original, schemaState.edited, activeContract?.manualLinks, activeContract?.recordLinks]);
 
   // Build lookups for original and edited fields for linking pills
   const { origPartnerMap, editedPartnerMap } = useMemo(() => {
@@ -414,6 +464,93 @@ export function App() {
       };
     });
   }, []);
+
+  const handleCopyRecord = useCallback(
+    (record: AvroRecordType) => {
+      try {
+        const { createdLinks } = schemaState.copyRecordFromOriginal(record);
+        if (createdLinks.length > 0) {
+          setWorkspace((prevWs) => {
+            const contracts = prevWs.contracts.map((c) => {
+              if (c.id !== prevWs.activeContractId) return c;
+              const currentLinks = c.manualLinks || [];
+              const newLinks = [...currentLinks];
+              for (const pair of createdLinks) {
+                // remove existing if any
+                const filtered = newLinks.filter(
+                  ([e, o]) => e !== pair[0] && o !== pair[1]
+                );
+                filtered.push(pair);
+                newLinks.length = 0;
+                newLinks.push(...filtered);
+              }
+              return {
+                ...c,
+                manualLinks: newLinks,
+              };
+            });
+            return {
+              ...prevWs,
+              contracts,
+              manualLinks: contracts.find((c) => c.id === prevWs.activeContractId)?.manualLinks || [],
+            };
+          });
+        }
+      } catch (err) {
+        console.error('Failed to copy record:', err);
+      }
+    },
+    [schemaState]
+  );
+
+  const handleLinkRecord = useCallback(
+    (originalRecordName: string, editedRecordName: string) => {
+      setWorkspace((prevWs) => {
+        const contracts = prevWs.contracts.map((c) => {
+          if (c.id !== prevWs.activeContractId) return c;
+          const currentRecLinks = c.recordLinks || [];
+          // Pair is [editedRecordName, originalRecordName]
+          const filtered = currentRecLinks.filter(
+            ([e, o]) => e !== editedRecordName && o !== originalRecordName
+          );
+          return {
+            ...c,
+            recordLinks: [...filtered, [editedRecordName, originalRecordName] as [string, string]],
+          };
+        });
+        const activeC = contracts.find((c) => c.id === prevWs.activeContractId);
+        return {
+          ...prevWs,
+          contracts,
+          recordLinks: activeC?.recordLinks || [],
+        };
+      });
+    },
+    []
+  );
+
+  const handleUnlinkRecord = useCallback(
+    (originalRecordName: string) => {
+      setWorkspace((prevWs) => {
+        const contracts = prevWs.contracts.map((c) => {
+          if (c.id !== prevWs.activeContractId) return c;
+          const currentRecLinks = c.recordLinks || [];
+          const filtered = currentRecLinks.filter(([, o]) => o !== originalRecordName);
+          return {
+            ...c,
+            recordLinks: filtered,
+          };
+        });
+        const activeC = contracts.find((c) => c.id === prevWs.activeContractId);
+        return {
+          ...prevWs,
+          contracts,
+          recordLinks: activeC?.recordLinks || [],
+        };
+      });
+    },
+    []
+  );
 
   // Top-level drag and drop end handler for both cross-pane and within-pane
   const handleDragEnd = useCallback(
@@ -662,6 +799,8 @@ export function App() {
         onNewWorkspace={handleNewWorkspace}
         userId={userId}
         onOpenUserModal={() => setIsUserModalOpen(true)}
+        schemaVersion={schemaState.edited?.schemaVersion}
+        onUpdateSchemaVersion={schemaState.setSchemaVersion}
       />
 
       {/* Multi-Contract Tab Bar */}
@@ -721,11 +860,20 @@ export function App() {
             <SchemaViewer
               protocol={schemaState.original}
               annotations={diffResult.originalAnnotations}
+              recordLinks={activeContract?.recordLinks}
               partnerFieldsMap={origPartnerMap}
+              availableEditedRecordNames={
+                schemaState.edited?.types
+                  ? schemaState.edited.types.filter(isRecordType).map((r) => r.name)
+                  : []
+              }
               linkingFieldId={linkingState?.fieldId}
               onStartLinking={handleStartLinking}
               onLinkField={handleLinkField}
               onUnlink={handleUnlink}
+              onCopyRecord={handleCopyRecord}
+              onLinkRecord={handleLinkRecord}
+              onUnlinkRecord={handleUnlinkRecord}
             />
           </section>
 
@@ -739,7 +887,7 @@ export function App() {
               onStartLinking={handleStartLinking}
               onLinkField={handleLinkField}
               onUnlink={handleUnlink}
-              onAddField={(rec, name, type) => schemaState.addField(rec, { name, type })}
+              onAddField={(rec, name, type, recNs) => schemaState.addField(rec, { name, type }, undefined, recNs)}
               onRemoveField={schemaState.removeField}
               onRenameField={schemaState.renameField}
               onUpdateFieldType={schemaState.updateFieldType}
@@ -755,6 +903,7 @@ export function App() {
               onAddRecord={schemaState.addRecord}
               onRemoveRecord={schemaState.removeRecord}
               onRenameRecord={schemaState.renameRecord}
+              onUpdateRecordNamespace={schemaState.updateRecordNamespace}
             />
           </section>
         </main>
