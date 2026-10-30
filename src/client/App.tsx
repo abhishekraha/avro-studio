@@ -20,6 +20,7 @@ import { ImportModal } from './components/Modals/ImportModal';
 import { AvdlPreviewModal } from './components/Modals/AvdlPreviewModal';
 import { ContractExportModal } from './components/Modals/ContractExportModal';
 import { UserModal } from './components/Modals/UserModal';
+import { SchemaConnectionOverlay, type FieldConnection } from './components/SchemaConnectionOverlay';
 import { useSchemaState } from './hooks/useSchemaState';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useUserIdentity } from './hooks/useUserIdentity';
@@ -225,6 +226,30 @@ export function App() {
       }
     }
 
+    // 1. First populate matching synthetic IDs (same ID between original and edited)
+    if (origProto?.types && editProto?.types) {
+      for (const origType of origProto.types) {
+        if (isRecordType(origType)) {
+          for (const origField of origType.fields) {
+            const editInfo = editFieldsById.get(origField.id);
+            if (editInfo) {
+              origMap.set(origField.id, {
+                fieldId: origField.id,
+                fieldName: editInfo.fieldName,
+                recordName: editInfo.recordName,
+              });
+              editMap.set(origField.id, {
+                fieldId: origField.id,
+                fieldName: origField.name,
+                recordName: origType.name,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Override/supplement with manualLinks (manual mappings take precedence)
     const manualLinks = activeContract?.manualLinks || [];
     for (const [editedFieldId, originalFieldId] of manualLinks) {
       const origInfo = origFieldsById.get(originalFieldId);
@@ -248,6 +273,79 @@ export function App() {
     }
 
     return { origPartnerMap: origMap, editedPartnerMap: editMap };
+  }, [activeContract?.original, schemaState.original, schemaState.edited, activeContract?.manualLinks]);
+
+  // Compute connections list for overlay lines
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const studioContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const connections = useMemo<FieldConnection[]>(() => {
+    const list: FieldConnection[] = [];
+    const origProto = activeContract?.original ?? schemaState.original;
+    const editProto = schemaState.edited;
+    if (!origProto || !editProto) return list;
+
+    // Track added pairs to avoid duplicates
+    const seen = new Set<string>();
+
+    // Manual links
+    const manualLinks = activeContract?.manualLinks || [];
+    for (const [editedFieldId, originalFieldId] of manualLinks) {
+      const pairKey = `${originalFieldId}::${editedFieldId}`;
+      if (!seen.has(pairKey)) {
+        seen.add(pairKey);
+        list.push({
+          originalFieldId,
+          editedFieldId,
+          origElementId: `field-orig-${originalFieldId}`,
+          editElementId: `field-edit-${editedFieldId}`,
+          isManual: true,
+        });
+      }
+    }
+
+    // Default matching synthetic ID links
+    const manualEditedIds = new Set(manualLinks.map(([e]) => e));
+    const manualOrigIds = new Set(manualLinks.map(([, o]) => o));
+
+    const origFieldsById = new Set<string>();
+    if (origProto.types) {
+      for (const t of origProto.types) {
+        if (isRecordType(t)) {
+          for (const f of t.fields) {
+            origFieldsById.add(f.id);
+          }
+        }
+      }
+    }
+
+    if (editProto.types) {
+      for (const t of editProto.types) {
+        if (isRecordType(t)) {
+          for (const f of t.fields) {
+            if (
+              origFieldsById.has(f.id) &&
+              !manualEditedIds.has(f.id) &&
+              !manualOrigIds.has(f.id)
+            ) {
+              const pairKey = `${f.id}::${f.id}`;
+              if (!seen.has(pairKey)) {
+                seen.add(pairKey);
+                list.push({
+                  originalFieldId: f.id,
+                  editedFieldId: f.id,
+                  origElementId: `field-orig-${f.id}`,
+                  editElementId: `field-edit-${f.id}`,
+                  isManual: false,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return list;
   }, [activeContract?.original, schemaState.original, schemaState.edited, activeContract?.manualLinks]);
 
   // Linking actions
@@ -609,7 +707,15 @@ export function App() {
 
       {/* Dual-Pane Studio Workspace wrapped in top-level DndContext */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <main className="flex-1 flex overflow-hidden">
+        <main ref={studioContainerRef} className="flex-1 flex overflow-hidden relative">
+          {/* Connecting lines overlay */}
+          <SchemaConnectionOverlay
+            connections={connections}
+            selectedConnectionId={selectedConnectionId}
+            onSelectConnection={setSelectedConnectionId}
+            containerRef={studioContainerRef}
+          />
+
           {/* Left Pane: Read-only Original Schema */}
           <section className="w-1/2 border-r border-gray-800 bg-gray-950/40 flex flex-col overflow-hidden">
             <SchemaViewer

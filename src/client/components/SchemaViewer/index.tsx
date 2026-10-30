@@ -122,6 +122,7 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
   return (
     <div
       ref={setNodeRef}
+      id={`field-orig-${field.id}`}
       style={style}
       className={`group px-3 py-2 flex items-center justify-between text-xs transition-colors hover:bg-gray-800/40 ${getRowDiffStyle(
         diffStatus

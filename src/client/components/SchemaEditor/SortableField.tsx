@@ -108,6 +108,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
   return (
     <div
       ref={setNodeRef}
+      id={`field-edit-${field.id}`}
       style={style}
       className={`group px-3 py-2 flex items-center justify-between text-xs bg-gray-900 border border-gray-800/80 rounded-lg hover:border-gray-700 transition shadow-sm ${
         isDragging ? 'shadow-lg border-indigo-500' : ''
