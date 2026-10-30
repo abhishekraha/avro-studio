@@ -11,7 +11,8 @@ export * from './db/workspaceRepository';
 export * from './db/client';
 
 const PORT = Number(process.env.PORT) || 3000;
-const DB_PATH = process.env.DATABASE_PATH || path.resolve(process.cwd(), 'avro-editor.db');
+const DB_DIR = process.env.AVRO_DATA_DIR;
+const DB_PATH = process.env.DATABASE_PATH || (DB_DIR ? path.resolve(DB_DIR, 'avro-editor.db') : path.resolve(process.cwd(), 'avro-editor.db'));
 
 export function startServer() {
   const dbContext = createDatabase(DB_PATH);
