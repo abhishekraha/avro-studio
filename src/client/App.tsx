@@ -762,6 +762,92 @@ export function App() {
 
         if (targetRecordName) {
           const originalField = activeData.field;
+
+          // Check if this original field is ALREADY present/linked on the right side in another record
+          // Look up in edited schema by ID, or by manualLinks pointing to this originalField.id
+          let existingEditedFieldInfo: { recordName: string; fieldId: string } | undefined;
+
+          if (schemaState.edited?.types) {
+            // 1. Direct ID match
+            for (const t of schemaState.edited.types) {
+              if (isRecordType(t)) {
+                const found = t.fields.find((f) => f.id === originalField.id);
+                if (found) {
+                  existingEditedFieldInfo = { recordName: t.name, fieldId: found.id };
+                  break;
+                }
+              }
+            }
+
+            // 2. Or mapped via manualLinks
+            if (!existingEditedFieldInfo) {
+              const currentLinks = activeContract?.manualLinks || [];
+              const linkPair = currentLinks.find(([, o]) => o === originalField.id);
+              if (linkPair) {
+                const [linkedEditedId] = linkPair;
+                for (const t of schemaState.edited.types) {
+                  if (isRecordType(t)) {
+                    const found = t.fields.find((f) => f.id === linkedEditedId);
+                    if (found) {
+                      existingEditedFieldInfo = { recordName: t.name, fieldId: found.id };
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            // 3. Or matching canonical name
+            if (!existingEditedFieldInfo) {
+              for (const t of schemaState.edited.types) {
+                if (isRecordType(t)) {
+                  const found = t.fields.find((f) => f.name.toLowerCase() === originalField.name.toLowerCase());
+                  if (found) {
+                    existingEditedFieldInfo = { recordName: t.name, fieldId: found.id };
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (existingEditedFieldInfo) {
+            // Field is already linked in an edited record.
+            // If dragging into a different record, MOVE the right-side field instead of creating a duplicate!
+            if (existingEditedFieldInfo.recordName !== targetRecordName) {
+              schemaState.moveField({
+                sourceRecordName: existingEditedFieldInfo.recordName,
+                targetRecordName,
+                fieldId: existingEditedFieldInfo.fieldId,
+              });
+
+              // Ensure manualLinks points to this existing field and target original field
+              setWorkspace((prevWs) => {
+                const contracts = prevWs.contracts.map((c) => {
+                  if (c.id !== prevWs.activeContractId) return c;
+                  const currentLinks = c.manualLinks || [];
+                  const filtered = currentLinks.filter(
+                    ([e, o]) => e !== existingEditedFieldInfo!.fieldId && o !== originalField.id
+                  );
+                  return {
+                    ...c,
+                    manualLinks: [
+                      ...filtered,
+                      [existingEditedFieldInfo!.fieldId, originalField.id] as [string, string],
+                    ],
+                  };
+                });
+                return {
+                  ...prevWs,
+                  contracts,
+                  manualLinks: contracts.find((c) => c.id === prevWs.activeContractId)?.manualLinks || [],
+                };
+              });
+            }
+            return;
+          }
+
+          // If not already on right side, create new field & link
           const syntheticId = `g-${Math.random().toString(36).substring(2, 6)}`;
 
           // 1. Add field to target record
