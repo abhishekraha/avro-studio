@@ -1,6 +1,7 @@
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import type { AvroProtocol } from '../../core/types/schema';
+import type { ContractItem } from '../../core/types/workspace';
 
 export const workspaces = sqliteTable(
   'workspaces',
@@ -10,6 +11,8 @@ export const workspaces = sqliteTable(
     name: text('name').notNull(),
     isNew: integer('is_new', { mode: 'boolean' }).notNull().default(false),
     savedAt: text('saved_at').notNull(),
+    activeContractId: text('active_contract_id'),
+    contracts: text('contracts', { mode: 'json' }).$type<ContractItem[] | null>(),
     originalSchema: text('original_schema', { mode: 'json' }).$type<AvroProtocol | null>(),
     editedSchema: text('edited_schema', { mode: 'json' }).$type<AvroProtocol | null>(),
     manualLinks: text('manual_links', { mode: 'json' }).$type<Array<[string, string]>>().notNull().default(sql`'[]'`),

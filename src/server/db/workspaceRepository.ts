@@ -2,7 +2,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { AppDatabase } from './client';
 import { workspaces, workspaceRevisions, type WorkspaceSelect } from './schema';
-import type { WorkspaceData } from '../../core/types/workspace';
+import { ensureMultiContractWorkspace, type WorkspaceData, type ContractItem } from '../../core/types/workspace';
 
 export interface WorkspaceMeta {
   id: string;
@@ -66,8 +66,14 @@ export class WorkspaceRepository {
   saveWorkspace(data: WorkspaceData, userId?: string): { id: string } {
     const effectiveUserId = userId !== undefined ? userId : data.userId ?? null;
     const now = new Date();
+    const normalized = ensureMultiContractWorkspace(data);
 
-    const existingConditions = [eq(workspaces.id, data.id)];
+    // Identify active contract to keep legacy columns in sync
+    const activeContract =
+      normalized.contracts.find((c) => c.id === normalized.activeContractId) ||
+      normalized.contracts[0];
+
+    const existingConditions = [eq(workspaces.id, normalized.id)];
     if (userId !== undefined) {
       existingConditions.push(eq(workspaces.userId, userId));
     }
@@ -82,41 +88,45 @@ export class WorkspaceRepository {
       this.db
         .update(workspaces)
         .set({
-          name: data.name,
-          isNew: data.isNew,
-          savedAt: data.savedAt || now.toISOString(),
-          originalSchema: data.original,
-          editedSchema: data.edited,
-          manualLinks: data.manualLinks || [],
-          recordLinks: data.recordLinks ?? null,
-          originalFieldNotes: data.originalFieldNotes ?? null,
-          editedFieldNotes: data.editedFieldNotes ?? null,
+          name: normalized.name,
+          isNew: normalized.isNew,
+          savedAt: normalized.savedAt || now.toISOString(),
+          activeContractId: normalized.activeContractId,
+          contracts: normalized.contracts,
+          originalSchema: activeContract?.original ?? null,
+          editedSchema: activeContract?.edited ?? null,
+          manualLinks: activeContract?.manualLinks || [],
+          recordLinks: activeContract?.recordLinks ?? null,
+          originalFieldNotes: activeContract?.originalFieldNotes ?? null,
+          editedFieldNotes: activeContract?.editedFieldNotes ?? null,
           updatedAt: now,
         })
-        .where(eq(workspaces.id, data.id))
+        .where(eq(workspaces.id, normalized.id))
         .run();
     } else {
       this.db
         .insert(workspaces)
         .values({
-          id: data.id,
+          id: normalized.id,
           userId: effectiveUserId,
-          name: data.name,
-          isNew: data.isNew,
-          savedAt: data.savedAt || now.toISOString(),
-          originalSchema: data.original,
-          editedSchema: data.edited,
-          manualLinks: data.manualLinks || [],
-          recordLinks: data.recordLinks ?? null,
-          originalFieldNotes: data.originalFieldNotes ?? null,
-          editedFieldNotes: data.editedFieldNotes ?? null,
+          name: normalized.name,
+          isNew: normalized.isNew,
+          savedAt: normalized.savedAt || now.toISOString(),
+          activeContractId: normalized.activeContractId,
+          contracts: normalized.contracts,
+          originalSchema: activeContract?.original ?? null,
+          editedSchema: activeContract?.edited ?? null,
+          manualLinks: activeContract?.manualLinks || [],
+          recordLinks: activeContract?.recordLinks ?? null,
+          originalFieldNotes: activeContract?.originalFieldNotes ?? null,
+          editedFieldNotes: activeContract?.editedFieldNotes ?? null,
           createdAt: now,
           updatedAt: now,
         })
         .run();
     }
 
-    return { id: data.id };
+    return { id: normalized.id };
   }
 
   deleteWorkspace(id: string, userId?: string): boolean {
@@ -189,10 +199,23 @@ export class WorkspaceRepository {
   }
 
   private mapToWorkspaceData(row: WorkspaceSelect): WorkspaceData {
-    return {
+    if (row.contracts && Array.isArray(row.contracts) && row.contracts.length > 0) {
+      return ensureMultiContractWorkspace({
+        id: row.id,
+        name: row.name,
+        userId: row.userId ?? undefined,
+        savedAt: row.savedAt,
+        isNew: Boolean(row.isNew),
+        activeContractId: row.activeContractId || row.contracts[0].id,
+        contracts: row.contracts,
+      });
+    }
+
+    // Legacy row mapping fallback
+    return ensureMultiContractWorkspace({
       id: row.id,
       name: row.name,
-      ...(row.userId ? { userId: row.userId } : {}),
+      userId: row.userId ?? undefined,
       savedAt: row.savedAt,
       isNew: Boolean(row.isNew),
       original: row.originalSchema ?? null,
@@ -201,6 +224,6 @@ export class WorkspaceRepository {
       recordLinks: row.recordLinks ?? undefined,
       originalFieldNotes: row.originalFieldNotes ?? undefined,
       editedFieldNotes: row.editedFieldNotes ?? undefined,
-    };
+    });
   }
 }

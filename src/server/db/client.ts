@@ -24,6 +24,8 @@ export function createDatabase(dbPath: string = ':memory:'): AppDatabase {
       name TEXT NOT NULL,
       is_new INTEGER NOT NULL DEFAULT 0,
       saved_at TEXT NOT NULL,
+      active_contract_id TEXT,
+      contracts TEXT,
       original_schema TEXT,
       edited_schema TEXT,
       manual_links TEXT NOT NULL DEFAULT '[]',
