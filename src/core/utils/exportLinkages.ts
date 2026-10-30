@@ -1,0 +1,152 @@
+import {
+  type AvroProtocol,
+  type AvroField,
+  type AvroSchemaType,
+  type LinkageExport,
+  type LinkageEntry,
+  type LinkageEndpoint,
+  type LinkType,
+  type LinkSource,
+  isRecordType,
+} from '../types';
+import { formatAvdlType } from '../serializer/avdlSerializer';
+import { areTypesEqual } from './schemaDiff';
+
+/**
+ * Normalizes an array or map into a Map.
+ */
+function normalizePairMap(
+  input?: Map<string, string> | Array<[string, string]>
+): Map<string, string> {
+  if (!input) return new Map();
+  if (input instanceof Map) return input;
+  return new Map(input);
+}
+
+interface FieldMeta {
+  recordName: string;
+  field: AvroField;
+}
+
+/**
+ * Builds a LinkageExport JSON artifact for downstream database migrations.
+ */
+export function buildLinkageExport(
+  original: AvroProtocol,
+  edited: AvroProtocol,
+  manualLinks?: Array<[string, string]>,
+  recordLinks?: Array<[string, string]>
+): LinkageExport {
+  const manualMap = normalizePairMap(manualLinks); // editedFieldId -> origFieldId
+  const recMap = normalizePairMap(recordLinks);     // editedRecordName -> origRecordName
+
+  const origFields = new Map<string, FieldMeta>();
+  if (original.types) {
+    for (const t of original.types) {
+      if (isRecordType(t)) {
+        for (const f of t.fields) {
+          origFields.set(f.id, { recordName: t.name, field: f });
+        }
+      }
+    }
+  }
+
+  const editedFields = new Map<string, FieldMeta>();
+  if (edited.types) {
+    for (const t of edited.types) {
+      if (isRecordType(t)) {
+        for (const f of t.fields) {
+          editedFields.set(f.id, { recordName: t.name, field: f });
+        }
+      }
+    }
+  }
+
+  const linkages: LinkageEntry[] = [];
+  const matchedOrigIds = new Set<string>();
+
+  for (const [editedId, editedLoc] of editedFields.entries()) {
+    const isManual = manualMap.has(editedId);
+    let targetOrigId: string | undefined;
+
+    if (isManual) {
+      targetOrigId = manualMap.get(editedId);
+    } else if (origFields.has(editedId)) {
+      targetOrigId = editedId;
+    }
+
+    const editedEndpoint: LinkageEndpoint = {
+      recordName: editedLoc.recordName,
+      fieldName: editedLoc.field.name,
+      cleanType: formatAvdlType(editedLoc.field.type),
+      id: editedId,
+    };
+
+    if (!targetOrigId || !origFields.has(targetOrigId)) {
+      // Added field
+      linkages.push({
+        linkType: 'added',
+        linkSource: isManual ? 'manual' : 'auto',
+        edited: editedEndpoint,
+      });
+      continue;
+    }
+
+    const origLoc = origFields.get(targetOrigId)!;
+    matchedOrigIds.add(targetOrigId);
+
+    const origEndpoint: LinkageEndpoint = {
+      recordName: origLoc.recordName,
+      fieldName: origLoc.field.name,
+      cleanType: formatAvdlType(origLoc.field.type),
+      id: targetOrigId,
+    };
+
+    const effectiveOrigRecordName = recMap.get(editedLoc.recordName) || editedLoc.recordName;
+    const sameRecord = origLoc.recordName === effectiveOrigRecordName;
+    const sameName = origLoc.field.name === editedLoc.field.name;
+    const sameType = areTypesEqual(origLoc.field.type, editedLoc.field.type);
+
+    let linkType: LinkType;
+    if (sameRecord && sameName && sameType) {
+      linkType = 'identical';
+    } else if (sameRecord && !sameName && sameType) {
+      linkType = 'renamed';
+    } else if (!sameRecord && sameName && sameType) {
+      linkType = 'moved';
+    } else if (!sameRecord && !sameName && sameType) {
+      linkType = 'moved-renamed';
+    } else {
+      linkType = 'type-changed';
+    }
+
+    linkages.push({
+      linkType,
+      linkSource: isManual ? 'manual' : 'auto',
+      original: origEndpoint,
+      edited: editedEndpoint,
+    });
+  }
+
+  // Deleted fields in original that were not matched
+  for (const [origId, origLoc] of origFields.entries()) {
+    if (!matchedOrigIds.has(origId)) {
+      linkages.push({
+        linkType: 'deleted',
+        linkSource: 'auto',
+        original: {
+          recordName: origLoc.recordName,
+          fieldName: origLoc.field.name,
+          cleanType: formatAvdlType(origLoc.field.type),
+          id: origId,
+        },
+      });
+    }
+  }
+
+  return {
+    exportedAt: new Date().toISOString(),
+    schemaName: edited.protocol || original.protocol || 'AvroProtocol',
+    linkages,
+  };
+}
