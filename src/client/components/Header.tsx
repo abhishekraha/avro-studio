@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Code2,
   User,
+  FileCode2,
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -25,7 +26,8 @@ export interface HeaderProps {
   onUndo: () => void;
   onRedo: () => void;
   onSave: () => void;
-  onExportAvdl: () => void;
+  onExportAvdl?: () => void;
+  onOpenContractSchema?: () => void;
   onExportBigQuery: () => void;
   onExportLinkages: () => void;
   onOpenAvdlPreview: () => void;
@@ -48,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRedo,
   onSave,
   onExportAvdl,
+  onOpenContractSchema,
   onExportBigQuery,
   onExportLinkages,
   onOpenAvdlPreview,
@@ -171,23 +174,38 @@ export const Header: React.FC<HeaderProps> = ({
           <span>New</span>
         </button>
 
-        <button
-          onClick={onOpenAvdlPreview}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-          title="Preview side-by-side original and restructured AVDL"
-        >
-          <Code2 className="w-3.5 h-3.5 text-blue-400" />
-          <span>Preview AVDL</span>
-        </button>
+        {onOpenContractSchema ? (
+          <button
+            onClick={onOpenContractSchema}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded transition shadow-sm border border-indigo-500"
+            title="Inspect, copy, or download contract schema (AVDL & AVSC)"
+          >
+            <FileCode2 className="w-3.5 h-3.5" />
+            <span>Contract Schema</span>
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={onOpenAvdlPreview}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
+              title="Preview side-by-side original and restructured AVDL"
+            >
+              <Code2 className="w-3.5 h-3.5 text-blue-400" />
+              <span>Preview AVDL</span>
+            </button>
 
-        <button
-          onClick={onExportAvdl}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-          title="Export AVDL schema file"
-        >
-          <Download className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Export AVDL</span>
-        </button>
+            {onExportAvdl && (
+              <button
+                onClick={onExportAvdl}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
+                title="Export AVDL schema file"
+              >
+                <Download className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Export AVDL</span>
+              </button>
+            )}
+          </>
+        )}
 
         <button
           onClick={onExportBigQuery}

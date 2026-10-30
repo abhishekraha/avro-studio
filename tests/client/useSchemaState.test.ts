@@ -157,4 +157,18 @@ describe('SchemaStateManager & useSchemaState core logic', () => {
     expect(current?.types).toHaveLength(2);
     expect(current?.types[0].name).toBe('Customer');
   });
+
+  it('tracks isDirty correctly on modification and undo/redo', () => {
+    const manager = new SchemaStateManager(sampleProtocol);
+    expect(manager.isDirty()).toBe(false);
+
+    manager.addField('Order', { name: 'newField', type: 'string' });
+    expect(manager.isDirty()).toBe(true);
+
+    manager.undo();
+    expect(manager.isDirty()).toBe(false);
+
+    manager.redo();
+    expect(manager.isDirty()).toBe(true);
+  });
 });

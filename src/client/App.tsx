@@ -7,6 +7,7 @@ import { ReconciliationModal } from './components/Modals/ReconciliationModal';
 import { LinkagesExportModal } from './components/Modals/LinkagesExportModal';
 import { ImportModal } from './components/Modals/ImportModal';
 import { AvdlPreviewModal } from './components/Modals/AvdlPreviewModal';
+import { ContractExportModal } from './components/Modals/ContractExportModal';
 import { UserModal } from './components/Modals/UserModal';
 import { useSchemaState } from './hooks/useSchemaState';
 import { useWorkspaces } from './hooks/useWorkspaces';
@@ -14,7 +15,7 @@ import { useUserIdentity } from './hooks/useUserIdentity';
 import { computeDiff } from '../core/utils/schemaDiff';
 import { serializeAvdl } from '../core/serializer/avdlSerializer';
 import type { AvroProtocol } from '../core/types/schema';
-import type { WorkspaceData } from '../core/types/workspace';
+import type { WorkspaceData, ContractItem } from '../core/types/workspace';
 
 const DEFAULT_PROTOCOL: AvroProtocol = {
   protocol: 'OrderServiceProtocol',
@@ -56,6 +57,7 @@ export function App() {
   const [isLinkagesModalOpen, setIsLinkagesModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAvdlPreviewOpen, setIsAvdlPreviewOpen] = useState(false);
+  const [isContractSchemaOpen, setIsContractSchemaOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
 
   const { userId, setUserId, isInitialized } = useUserIdentity();
@@ -89,7 +91,7 @@ export function App() {
   const schemaState = useSchemaState({
     initialProtocol: DEFAULT_PROTOCOL,
     onAutoSave: handleAutoSave,
-    debounceMs: 2000,
+    debounceMs: 1500,
   });
 
   // Calculate live diff annotations between original and edited schemas
@@ -157,6 +159,7 @@ export function App() {
         onRedo={schemaState.redo}
         onSave={handleExplicitSave}
         onExportAvdl={handleExportAvdl}
+        onOpenContractSchema={() => setIsContractSchemaOpen(true)}
         onOpenAvdlPreview={() => setIsAvdlPreviewOpen(true)}
         onExportBigQuery={() => setIsBqModalOpen(true)}
         onExportLinkages={() => setIsLinkagesModalOpen(true)}
@@ -266,6 +269,19 @@ export function App() {
         onClose={() => setIsAvdlPreviewOpen(false)}
         originalProtocol={schemaState.original}
         editedProtocol={schemaState.edited}
+      />
+
+      {/* Contract Schema Export Modal (AVDL & AVSC) */}
+      <ContractExportModal
+        isOpen={isContractSchemaOpen}
+        onClose={() => setIsContractSchemaOpen(false)}
+        contract={{
+          id: 'contract-active',
+          name: workspaceName || 'contract',
+          original: schemaState.original,
+          edited: schemaState.edited,
+          manualLinks: [],
+        }}
       />
 
       {/* User Identity Modal */}
