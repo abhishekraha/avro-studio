@@ -46,6 +46,28 @@ export function createWorkspaceRoutes(options: WorkspaceRoutesOptions) {
     return c.json({ success: true, id: res.id });
   });
 
+  // PUT /api/workspaces/:id -> Body: WorkspaceData -> { success: true, id: string }
+  workspaces.put('/:id', async (c) => {
+    const id = c.req.param('id');
+    const userId = c.get('userId');
+    let body: WorkspaceData;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ success: false, error: 'Invalid JSON body' }, 400);
+    }
+
+    if (!body || !body.name) {
+      return c.json({ success: false, error: 'Workspace name is required' }, 400);
+    }
+
+    // Ensure body ID matches URL param
+    body.id = id;
+
+    const res = repo.saveWorkspace(body, userId);
+    return c.json({ success: true, id: res.id });
+  });
+
   // DELETE /api/workspaces/:id -> { success: true }
   workspaces.delete('/:id', (c) => {
     const id = c.req.param('id');

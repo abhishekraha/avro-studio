@@ -50,6 +50,31 @@ describe('Server API Endpoints & Proxy', () => {
       expect(listBody.workspaces[0].name).toBe('My Test Workspace');
     });
 
+    it('PUT /api/workspaces/:id updates an existing workspace', async () => {
+      const ws = createDefaultWorkspace('ws-put', 'Initial WS');
+      await app.request('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ws),
+      });
+
+      const updated = {
+        ...ws,
+        name: 'Updated via PUT',
+      };
+      const putRes = await app.request('/api/workspaces/ws-put', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      expect(putRes.status).toBe(200);
+      const putBody = await putRes.json();
+      expect(putBody).toEqual({ success: true, id: 'ws-put' });
+
+      const fetched = repo.getWorkspace('ws-put');
+      expect(fetched?.name).toBe('Updated via PUT');
+    });
+
     it('GET /api/workspaces/:id returns workspace or 404', async () => {
       const ws = createDefaultWorkspace('ws-fetch', 'Fetch Me');
       repo.saveWorkspace(ws);
