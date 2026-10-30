@@ -1,19 +1,26 @@
 import React, { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Trash2, Edit2, Check, X } from 'lucide-react';
+import { GripVertical, Trash2, Edit2, Check, X, Link as LinkIcon, X as XIcon } from 'lucide-react';
 import type { AvroField, AvroSchemaType, PrimitiveType } from '../../../core/types/schema';
 import type { LinkType } from '../../../core/types/linkage';
 import { PRIMITIVE_TYPES } from '../../../core/types/schema';
 import { formatAvdlType } from '../../../core/serializer/avdlSerializer';
+import type { LinkedPartnerInfo } from '../SchemaViewer';
 
 export interface SortableFieldProps {
   recordName: string;
   field: AvroField;
   diffStatus?: LinkType | 'unchanged';
+  linkedPartner?: LinkedPartnerInfo;
+  isLinkingActive?: boolean;
+  isSelfLinking?: boolean;
   onRename: (newName: string) => void;
   onUpdateType: (newType: AvroSchemaType) => void;
   onRemove: () => void;
+  onStartLinking?: () => void;
+  onLinkToThis?: () => void;
+  onUnlink?: () => void;
   availableNamedTypes: string[];
 }
 
@@ -21,9 +28,15 @@ export const SortableField: React.FC<SortableFieldProps> = ({
   recordName: _recordName,
   field,
   diffStatus,
+  linkedPartner,
+  isLinkingActive,
+  isSelfLinking,
   onRename,
   onUpdateType,
   onRemove,
+  onStartLinking,
+  onLinkToThis,
+  onUnlink,
   availableNamedTypes,
 }) => {
   const {
@@ -186,6 +199,51 @@ export const SortableField: React.FC<SortableFieldProps> = ({
           )}
         </select>
 
+        {/* Link / Unlink Controls */}
+        {linkedPartner ? (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 shadow-xs">
+            <LinkIcon className="w-2.5 h-2.5" />
+            <span className="max-w-[80px] truncate" title={`Linked to ${linkedPartner.recordName}.${linkedPartner.fieldName}`}>
+              {linkedPartner.fieldName}
+            </span>
+            {onUnlink && (
+              <button
+                type="button"
+                onClick={onUnlink}
+                className="hover:text-emerald-100 hover:bg-emerald-900/50 rounded p-0.5 transition ml-0.5"
+                title="Unlink field"
+                aria-label="Unlink field"
+              >
+                <XIcon className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </span>
+        ) : isLinkingActive ? (
+          <button
+            type="button"
+            onClick={onLinkToThis}
+            disabled={isSelfLinking}
+            className={`px-1.5 py-0.5 text-[10px] rounded font-medium transition ${
+              isSelfLinking
+                ? 'bg-indigo-900 text-indigo-300 ring-1 ring-indigo-500 animate-pulse'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+            }`}
+          >
+            {isSelfLinking ? 'Linking...' : 'Pair'}
+          </button>
+        ) : (
+          onStartLinking && (
+            <button
+              type="button"
+              onClick={onStartLinking}
+              className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 text-[10px] text-gray-400 hover:text-emerald-400 border border-gray-700 hover:border-emerald-600 rounded transition"
+              title="Link to original field"
+            >
+              Link
+            </button>
+          )
+        )}
+
         {/* Diff badge */}
         {renderBadge()}
       </div>
@@ -203,3 +261,4 @@ export const SortableField: React.FC<SortableFieldProps> = ({
     </div>
   );
 };
+

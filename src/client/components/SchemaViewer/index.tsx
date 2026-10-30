@@ -1,28 +1,69 @@
 import React from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import type { AvroProtocol, AvroRecordType, AvroField } from '../../../core/types/schema';
 import type { LinkType } from '../../../core/types/linkage';
 import { isRecordType } from '../../../core/types/schema';
 import { formatAvdlType } from '../../../core/serializer/avdlSerializer';
-import { BookOpen, FileText } from 'lucide-react';
+import { BookOpen, FileText, GripVertical, Link as LinkIcon, X as XIcon } from 'lucide-react';
+
+export interface LinkedPartnerInfo {
+  fieldId: string;
+  fieldName: string;
+  recordName: string;
+}
 
 export interface SchemaViewerProps {
   protocol: AvroProtocol | null;
   annotations?: Map<string, LinkType | 'unchanged'>;
+  manualLinks?: Array<[string, string]>;
+  partnerFieldsMap?: Map<string, LinkedPartnerInfo>; // origFieldId -> edited partner info
+  linkingFieldId?: string | null;
+  onStartLinking?: (fieldId: string, isOriginal: boolean) => void;
+  onLinkField?: (targetFieldId: string) => void;
+  onUnlink?: (fieldId: string) => void;
 }
 
-export const SchemaViewer: React.FC<SchemaViewerProps> = ({ protocol, annotations }) => {
-  if (!protocol || protocol.types.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8 select-none">
-        <BookOpen className="w-12 h-12 mb-3 opacity-30" />
-        <p className="text-base font-medium text-gray-400">No Original Schema Loaded</p>
-        <p className="text-xs text-gray-600 mt-1">Import a schema or protocol to see the baseline</p>
-      </div>
-    );
-  }
+interface DraggableFieldRowProps {
+  recordName: string;
+  field: AvroField;
+  diffStatus?: LinkType | 'unchanged';
+  linkedPartner?: LinkedPartnerInfo;
+  isLinkingActive?: boolean;
+  isSelfLinking?: boolean;
+  onStartLinking?: () => void;
+  onLinkToThis?: () => void;
+  onUnlink?: () => void;
+}
 
-  const renderBadge = (diffStatus?: LinkType | 'unchanged') => {
-    switch (diffStatus) {
+const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
+  recordName,
+  field,
+  diffStatus,
+  linkedPartner,
+  isLinkingActive,
+  isSelfLinking,
+  onStartLinking,
+  onLinkToThis,
+  onUnlink,
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: 'orig-' + field.id,
+    data: {
+      source: 'original',
+      field,
+      recordName,
+    },
+  });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        opacity: isDragging ? 0.4 : 1,
+      }
+    : undefined;
+
+  const renderBadge = (status?: LinkType | 'unchanged') => {
+    switch (status) {
       case 'deleted':
         return (
           <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-rose-950 text-rose-400 border border-rose-800">
@@ -62,8 +103,8 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ protocol, annotation
     }
   };
 
-  const getRowDiffStyle = (diffStatus?: LinkType | 'unchanged') => {
-    switch (diffStatus) {
+  const getRowDiffStyle = (status?: LinkType | 'unchanged') => {
+    switch (status) {
       case 'deleted':
         return 'bg-rose-950/20 border-l-2 border-l-rose-500 line-through opacity-75';
       case 'moved':
@@ -77,6 +118,115 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ protocol, annotation
         return 'border-l-2 border-l-transparent';
     }
   };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group px-3 py-2 flex items-center justify-between text-xs transition-colors hover:bg-gray-800/40 ${getRowDiffStyle(
+        diffStatus
+      )} ${isDragging ? 'shadow-lg border-indigo-500 bg-gray-900/90' : ''}`}
+    >
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        {/* Drag Handle */}
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-0.5 text-gray-500 hover:text-gray-300 rounded"
+          title="Drag field to copy & link into target record"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
+
+        <span className="text-[10px] text-gray-600 font-mono select-none px-1 py-0.2 rounded bg-gray-800/40">
+          {field.id}
+        </span>
+        <span className="font-medium text-gray-200 font-mono">{field.name}</span>
+        <span className="text-indigo-400 font-mono text-[11px]">
+          {formatAvdlType(field.type)}
+        </span>
+        {field.default !== undefined && (
+          <span className="text-gray-500 text-[11px] font-mono">
+            = {JSON.stringify(field.default)}
+          </span>
+        )}
+        {field.doc && (
+          <span className="text-gray-500 truncate max-w-xs text-[11px] italic">
+            // {field.doc}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Link / Unlink Controls */}
+        {linkedPartner ? (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 shadow-xs">
+            <LinkIcon className="w-2.5 h-2.5" />
+            <span className="max-w-[80px] truncate" title={`Linked to ${linkedPartner.recordName}.${linkedPartner.fieldName}`}>
+              {linkedPartner.fieldName}
+            </span>
+            {onUnlink && (
+              <button
+                type="button"
+                onClick={onUnlink}
+                className="hover:text-emerald-100 hover:bg-emerald-900/50 rounded p-0.5 transition ml-0.5"
+                title="Unlink field"
+                aria-label="Unlink field"
+              >
+                <XIcon className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </span>
+        ) : isLinkingActive ? (
+          <button
+            type="button"
+            onClick={onLinkToThis}
+            disabled={isSelfLinking}
+            className={`px-1.5 py-0.5 text-[10px] rounded font-medium transition ${
+              isSelfLinking
+                ? 'bg-indigo-900 text-indigo-300 ring-1 ring-indigo-500 animate-pulse'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
+            }`}
+          >
+            {isSelfLinking ? 'Linking...' : 'Pair'}
+          </button>
+        ) : (
+          onStartLinking && (
+            <button
+              type="button"
+              onClick={onStartLinking}
+              className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 text-[10px] text-gray-400 hover:text-emerald-400 border border-gray-700 hover:border-emerald-600 rounded transition"
+              title="Link to edited field"
+            >
+              Link
+            </button>
+          )
+        )}
+
+        {renderBadge(diffStatus)}
+      </div>
+    </div>
+  );
+};
+
+export const SchemaViewer: React.FC<SchemaViewerProps> = ({
+  protocol,
+  annotations,
+  partnerFieldsMap,
+  linkingFieldId,
+  onStartLinking,
+  onLinkField,
+  onUnlink,
+}) => {
+  if (!protocol || protocol.types.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8 select-none">
+        <BookOpen className="w-12 h-12 mb-3 opacity-30" />
+        <p className="text-base font-medium text-gray-400">No Original Schema Loaded</p>
+        <p className="text-xs text-gray-600 mt-1">Import a schema or protocol to see the baseline</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-4 space-y-6">
@@ -133,35 +283,23 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({ protocol, annotation
               <div className="divide-y divide-gray-800/60">
                 {record.fields.map((field: AvroField) => {
                   const diffStatus = annotations?.get(field.id);
-                  return (
-                    <div
-                      key={field.id}
-                      className={`px-4 py-2 flex items-center justify-between text-xs transition-colors hover:bg-gray-800/40 ${getRowDiffStyle(
-                        diffStatus
-                      )}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] text-gray-600 font-mono select-none">
-                          {field.id}
-                        </span>
-                        <span className="font-medium text-gray-200 font-mono">{field.name}</span>
-                        <span className="text-indigo-400 font-mono text-[11px]">
-                          {formatAvdlType(field.type)}
-                        </span>
-                        {field.default !== undefined && (
-                          <span className="text-gray-500 text-[11px] font-mono">
-                            = {JSON.stringify(field.default)}
-                          </span>
-                        )}
-                        {field.doc && (
-                          <span className="text-gray-500 truncate max-w-xs text-[11px] italic">
-                            // {field.doc}
-                          </span>
-                        )}
-                      </div>
+                  const linkedPartner = partnerFieldsMap?.get(field.id);
+                  const isLinkingActive = !!linkingFieldId;
+                  const isSelfLinking = linkingFieldId === field.id;
 
-                      <div>{renderBadge(diffStatus)}</div>
-                    </div>
+                  return (
+                    <DraggableFieldRow
+                      key={field.id}
+                      recordName={record.name}
+                      field={field}
+                      diffStatus={diffStatus}
+                      linkedPartner={linkedPartner}
+                      isLinkingActive={isLinkingActive}
+                      isSelfLinking={isSelfLinking}
+                      onStartLinking={onStartLinking ? () => onStartLinking(field.id, true) : undefined}
+                      onLinkToThis={onLinkField ? () => onLinkField(field.id) : undefined}
+                      onUnlink={onUnlink && linkedPartner ? () => onUnlink(field.id) : undefined}
+                    />
                   );
                 })}
 

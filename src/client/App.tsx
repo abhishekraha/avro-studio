@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Header } from './components/Header';
 import { ContractTabBar } from './components/ContractTabBar';
-import { SchemaViewer } from './components/SchemaViewer';
+import { SchemaViewer, type LinkedPartnerInfo } from './components/SchemaViewer';
 import { SchemaEditor } from './components/SchemaEditor';
 import { BigQueryExportModal } from './components/Modals/BigQueryExportModal';
 import { ReconciliationModal } from './components/Modals/ReconciliationModal';
@@ -15,7 +25,8 @@ import { useWorkspaces } from './hooks/useWorkspaces';
 import { useUserIdentity } from './hooks/useUserIdentity';
 import { computeDiff } from '../core/utils/schemaDiff';
 import { serializeAvdl } from '../core/serializer/avdlSerializer';
-import type { AvroProtocol } from '../core/types/schema';
+import type { AvroProtocol, AvroRecordType } from '../core/types/schema';
+import { isRecordType } from '../core/types/schema';
 import type { WorkspaceData, ContractItem } from '../core/types/workspace';
 import { createDefaultWorkspace, ensureMultiContractWorkspace } from '../core/types/workspace';
 
@@ -159,12 +170,260 @@ export function App() {
     });
   }, [schemaState.edited]);
 
+  // Track manual linking mode state
+  const [linkingState, setLinkingState] = useState<{
+    fieldId: string;
+    isOriginal: boolean;
+  } | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   // Calculate live diff annotations between original and edited schemas of active contract
   const diffResult = useMemo(() => {
     const orig = activeContract?.original ?? schemaState.original;
     const edit = schemaState.edited;
-    return computeDiff(orig, edit);
-  }, [activeContract?.original, schemaState.original, schemaState.edited]);
+    const links = activeContract?.manualLinks;
+    return computeDiff(orig, edit, links);
+  }, [activeContract?.original, schemaState.original, schemaState.edited, activeContract?.manualLinks]);
+
+  // Build lookups for original and edited fields for linking pills
+  const { origPartnerMap, editedPartnerMap } = useMemo(() => {
+    const origMap = new Map<string, LinkedPartnerInfo>();
+    const editMap = new Map<string, LinkedPartnerInfo>();
+
+    const origProto = activeContract?.original ?? schemaState.original;
+    const editProto = schemaState.edited;
+
+    const origFieldsById = new Map<string, { fieldName: string; recordName: string }>();
+    if (origProto?.types) {
+      for (const t of origProto.types) {
+        if (isRecordType(t)) {
+          for (const f of t.fields) {
+            origFieldsById.set(f.id, { fieldName: f.name, recordName: t.name });
+          }
+        }
+      }
+    }
+
+    const editFieldsById = new Map<string, { fieldName: string; recordName: string }>();
+    if (editProto?.types) {
+      for (const t of editProto.types) {
+        if (isRecordType(t)) {
+          for (const f of t.fields) {
+            editFieldsById.set(f.id, { fieldName: f.name, recordName: t.name });
+          }
+        }
+      }
+    }
+
+    const manualLinks = activeContract?.manualLinks || [];
+    for (const [editedFieldId, originalFieldId] of manualLinks) {
+      const origInfo = origFieldsById.get(originalFieldId);
+      const editInfo = editFieldsById.get(editedFieldId);
+
+      if (origInfo) {
+        editMap.set(editedFieldId, {
+          fieldId: originalFieldId,
+          fieldName: origInfo.fieldName,
+          recordName: origInfo.recordName,
+        });
+      }
+
+      if (editInfo) {
+        origMap.set(originalFieldId, {
+          fieldId: editedFieldId,
+          fieldName: editInfo.fieldName,
+          recordName: editInfo.recordName,
+        });
+      }
+    }
+
+    return { origPartnerMap: origMap, editedPartnerMap: editMap };
+  }, [activeContract?.original, schemaState.original, schemaState.edited, activeContract?.manualLinks]);
+
+  // Linking actions
+  const handleStartLinking = useCallback((fieldId: string, isOriginal: boolean) => {
+    setLinkingState((prev) => {
+      if (prev && prev.fieldId === fieldId) {
+        return null; // toggle off
+      }
+      return { fieldId, isOriginal };
+    });
+  }, []);
+
+  const handleLinkField = useCallback(
+    (targetFieldId: string) => {
+      if (!linkingState) return;
+      if (linkingState.fieldId === targetFieldId) {
+        setLinkingState(null);
+        return;
+      }
+
+      const editedFieldId = linkingState.isOriginal ? targetFieldId : linkingState.fieldId;
+      const originalFieldId = linkingState.isOriginal ? linkingState.fieldId : targetFieldId;
+
+      setWorkspace((prevWs) => {
+        const contracts = prevWs.contracts.map((c) => {
+          if (c.id !== prevWs.activeContractId) return c;
+          const currentLinks = c.manualLinks || [];
+          // Remove any links involving either field
+          const filtered = currentLinks.filter(
+            ([e, o]) => e !== editedFieldId && o !== originalFieldId
+          );
+          return {
+            ...c,
+            manualLinks: [...filtered, [editedFieldId, originalFieldId] as [string, string]],
+          };
+        });
+        return {
+          ...prevWs,
+          contracts,
+          manualLinks: contracts.find((c) => c.id === prevWs.activeContractId)?.manualLinks || [],
+        };
+      });
+
+      setLinkingState(null);
+    },
+    [linkingState]
+  );
+
+  const handleUnlink = useCallback((fieldId: string) => {
+    setWorkspace((prevWs) => {
+      const contracts = prevWs.contracts.map((c) => {
+        if (c.id !== prevWs.activeContractId) return c;
+        const currentLinks = c.manualLinks || [];
+        const filtered = currentLinks.filter(
+          ([e, o]) => e !== fieldId && o !== fieldId
+        );
+        return {
+          ...c,
+          manualLinks: filtered,
+        };
+      });
+      return {
+        ...prevWs,
+        contracts,
+        manualLinks: contracts.find((c) => c.id === prevWs.activeContractId)?.manualLinks || [],
+      };
+    });
+  }, []);
+
+  // Top-level drag and drop end handler for both cross-pane and within-pane
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+
+      const activeData = active.data.current;
+      const overId = String(over.id);
+
+      // Check if dropped from original schema onto edited record card
+      if (activeData?.source === 'original' && activeData.field) {
+        let targetRecordName: string | undefined;
+
+        if (overId.startsWith('drop-rec-')) {
+          targetRecordName = overId.replace('drop-rec-', '');
+        } else {
+          // If dropped over a sortable field in edited schema, find enclosing record
+          if (schemaState.edited?.types) {
+            for (const t of schemaState.edited.types) {
+              if (isRecordType(t) && t.fields.some((f) => f.id === overId)) {
+                targetRecordName = t.name;
+                break;
+              }
+            }
+          }
+        }
+
+        if (targetRecordName) {
+          const originalField = activeData.field;
+          const syntheticId = `g-${Math.random().toString(36).substring(2, 6)}`;
+
+          // 1. Add field to target record
+          schemaState.addField(targetRecordName, {
+            id: syntheticId,
+            name: originalField.name,
+            type: originalField.type,
+            doc: originalField.doc,
+            default: originalField.default,
+          });
+
+          // 2. Automatically append [newFieldId, originalField.id] to activeContract.manualLinks
+          setWorkspace((prevWs) => {
+            const contracts = prevWs.contracts.map((c) => {
+              if (c.id !== prevWs.activeContractId) return c;
+              const currentLinks = c.manualLinks || [];
+              const filtered = currentLinks.filter(
+                ([e, o]) => e !== syntheticId && o !== originalField.id
+              );
+              return {
+                ...c,
+                manualLinks: [...filtered, [syntheticId, originalField.id] as [string, string]],
+              };
+            });
+            return {
+              ...prevWs,
+              contracts,
+              manualLinks: contracts.find((c) => c.id === prevWs.activeContractId)?.manualLinks || [],
+            };
+          });
+        }
+        return;
+      }
+
+      // Otherwise, handle intra-editor reorder / move across records
+      if (active.id === over.id || !schemaState.edited) return;
+
+      // Build field to record map for edited schema
+      const fieldToRecordMap = new Map<string, { recordName: string; index: number }>();
+      for (const t of schemaState.edited.types) {
+        if (isRecordType(t)) {
+          t.fields.forEach((f, idx) => {
+            fieldToRecordMap.set(f.id, { recordName: t.name, index: idx });
+          });
+        }
+      }
+
+      const activeInfo = fieldToRecordMap.get(String(active.id));
+      if (!activeInfo) return;
+
+      if (overId.startsWith('drop-rec-')) {
+        const targetRec = overId.replace('drop-rec-', '');
+        if (activeInfo.recordName !== targetRec) {
+          schemaState.moveField({
+            sourceRecordName: activeInfo.recordName,
+            targetRecordName: targetRec,
+            fieldId: String(active.id),
+          });
+        }
+        return;
+      }
+
+      const overInfo = fieldToRecordMap.get(overId);
+      if (overInfo) {
+        if (activeInfo.recordName === overInfo.recordName) {
+          schemaState.reorderField(activeInfo.recordName, activeInfo.index, overInfo.index);
+        } else {
+          schemaState.moveField({
+            sourceRecordName: activeInfo.recordName,
+            targetRecordName: overInfo.recordName,
+            fieldId: String(active.id),
+            targetIndex: overInfo.index,
+          });
+        }
+      }
+    },
+    [schemaState]
+  );
 
   const handleExplicitSave = async () => {
     if (!schemaState.edited) return;
@@ -348,40 +607,52 @@ export function App() {
         </div>
       </div>
 
-      {/* Dual-Pane Studio Workspace */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* Left Pane: Read-only Original Schema */}
-        <section className="w-1/2 border-r border-gray-800 bg-gray-950/40 flex flex-col overflow-hidden">
-          <SchemaViewer
-            protocol={schemaState.original}
-            annotations={diffResult.originalAnnotations}
-          />
-        </section>
+      {/* Dual-Pane Studio Workspace wrapped in top-level DndContext */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <main className="flex-1 flex overflow-hidden">
+          {/* Left Pane: Read-only Original Schema */}
+          <section className="w-1/2 border-r border-gray-800 bg-gray-950/40 flex flex-col overflow-hidden">
+            <SchemaViewer
+              protocol={schemaState.original}
+              annotations={diffResult.originalAnnotations}
+              partnerFieldsMap={origPartnerMap}
+              linkingFieldId={linkingState?.fieldId}
+              onStartLinking={handleStartLinking}
+              onLinkField={handleLinkField}
+              onUnlink={handleUnlink}
+            />
+          </section>
 
-        {/* Right Pane: Interactive Drag-and-Drop Editor */}
-        <section className="w-1/2 bg-gray-950 flex flex-col overflow-hidden">
-          <SchemaEditor
-            protocol={schemaState.edited}
-            annotations={diffResult.editedAnnotations}
-            onAddField={(rec, name, type) => schemaState.addField(rec, { name, type })}
-            onRemoveField={schemaState.removeField}
-            onRenameField={schemaState.renameField}
-            onUpdateFieldType={schemaState.updateFieldType}
-            onReorderField={schemaState.reorderField}
-            onMoveField={(sourceRecord, targetRecord, fieldId, targetIndex) =>
-              schemaState.moveField({
-                sourceRecordName: sourceRecord,
-                targetRecordName: targetRecord,
-                fieldId,
-                targetIndex,
-              })
-            }
-            onAddRecord={schemaState.addRecord}
-            onRemoveRecord={schemaState.removeRecord}
-            onRenameRecord={schemaState.renameRecord}
-          />
-        </section>
-      </main>
+          {/* Right Pane: Interactive Drag-and-Drop Editor */}
+          <section className="w-1/2 bg-gray-950 flex flex-col overflow-hidden">
+            <SchemaEditor
+              protocol={schemaState.edited}
+              annotations={diffResult.editedAnnotations}
+              partnerFieldsMap={editedPartnerMap}
+              linkingFieldId={linkingState?.fieldId}
+              onStartLinking={handleStartLinking}
+              onLinkField={handleLinkField}
+              onUnlink={handleUnlink}
+              onAddField={(rec, name, type) => schemaState.addField(rec, { name, type })}
+              onRemoveField={schemaState.removeField}
+              onRenameField={schemaState.renameField}
+              onUpdateFieldType={schemaState.updateFieldType}
+              onReorderField={schemaState.reorderField}
+              onMoveField={(sourceRecord, targetRecord, fieldId, targetIndex) =>
+                schemaState.moveField({
+                  sourceRecordName: sourceRecord,
+                  targetRecordName: targetRecord,
+                  fieldId,
+                  targetIndex,
+                })
+              }
+              onAddRecord={schemaState.addRecord}
+              onRemoveRecord={schemaState.removeRecord}
+              onRenameRecord={schemaState.renameRecord}
+            />
+          </section>
+        </main>
+      </DndContext>
 
       {/* Modals */}
       <BigQueryExportModal
@@ -402,6 +673,7 @@ export function App() {
         onClose={() => setIsLinkagesModalOpen(false)}
         original={schemaState.original}
         edited={schemaState.edited}
+        manualLinks={activeContract?.manualLinks}
       />
 
       <ImportModal
