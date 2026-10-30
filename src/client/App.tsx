@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
+import { ContractTabBar } from './components/ContractTabBar';
 import { SchemaViewer } from './components/SchemaViewer';
 import { SchemaEditor } from './components/SchemaEditor';
 import { BigQueryExportModal } from './components/Modals/BigQueryExportModal';
@@ -16,6 +17,7 @@ import { computeDiff } from '../core/utils/schemaDiff';
 import { serializeAvdl } from '../core/serializer/avdlSerializer';
 import type { AvroProtocol } from '../core/types/schema';
 import type { WorkspaceData, ContractItem } from '../core/types/workspace';
+import { createDefaultWorkspace, ensureMultiContractWorkspace } from '../core/types/workspace';
 
 const DEFAULT_PROTOCOL: AvroProtocol = {
   protocol: 'OrderServiceProtocol',
@@ -46,8 +48,25 @@ const DEFAULT_PROTOCOL: AvroProtocol = {
 };
 
 export function App() {
-  const [workspaceId, setWorkspaceId] = useState<string>(() => `ws-${Date.now()}`);
-  const [workspaceName, setWorkspaceName] = useState<string>('E-Commerce Rebuild');
+  const [workspace, setWorkspace] = useState<WorkspaceData>(() =>
+    ensureMultiContractWorkspace({
+      id: `ws-${Date.now()}`,
+      name: 'E-Commerce Rebuild',
+      savedAt: new Date().toISOString(),
+      isNew: true,
+      activeContractId: 'contract-1',
+      contracts: [
+        {
+          id: 'contract-1',
+          name: 'OrderService.avdl',
+          original: DEFAULT_PROTOCOL,
+          edited: DEFAULT_PROTOCOL,
+          manualLinks: [],
+        },
+      ],
+    })
+  );
+
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -63,21 +82,38 @@ export function App() {
   const { userId, setUserId, isInitialized } = useUserIdentity();
   const { saveWorkspace, loadWorkspace } = useWorkspaces();
 
-  // Autosave handler callback
+  // Active contract computed from workspace
+  const activeContract = useMemo(() => {
+    return (
+      workspace.contracts.find((c) => c.id === workspace.activeContractId) ||
+      workspace.contracts[0]
+    );
+  }, [workspace.contracts, workspace.activeContractId]);
+
+  // Keep a ref to the latest workspace to avoid closure race conditions during saves and callbacks
+  const workspaceRef = useRef(workspace);
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
+
+  // Autosave handler callback triggered by useSchemaState debounce
   const handleAutoSave = useCallback(
     async (currentEdited: AvroProtocol) => {
+      const currentWs = workspaceRef.current;
       setIsSaving(true);
       try {
+        const updatedContracts = currentWs.contracts.map((c) =>
+          c.id === currentWs.activeContractId ? { ...c, edited: currentEdited } : c
+        );
         const payload: WorkspaceData = {
-          id: workspaceId,
-          name: workspaceName,
+          ...currentWs,
           savedAt: new Date().toISOString(),
           isNew: false,
-          original: schemaState.original,
+          contracts: updatedContracts,
           edited: currentEdited,
-          manualLinks: [],
         };
         await saveWorkspace(payload);
+        setWorkspace(payload);
         setLastSavedAt(payload.savedAt);
       } catch (err) {
         console.error('Autosave error:', err);
@@ -85,40 +121,128 @@ export function App() {
         setIsSaving(false);
       }
     },
-    [workspaceId, workspaceName, saveWorkspace]
+    [saveWorkspace]
   );
 
   const schemaState = useSchemaState({
-    initialProtocol: DEFAULT_PROTOCOL,
+    initialProtocol: activeContract?.edited || DEFAULT_PROTOCOL,
     onAutoSave: handleAutoSave,
     debounceMs: 1500,
   });
 
-  // Calculate live diff annotations between original and edited schemas
+  // Track the contract ID that schemaState is currently displaying
+  const activeContractIdRef = useRef<string>(workspace.activeContractId);
+
+  // Synchronize schemaState whenever active contract changes
+  useEffect(() => {
+    if (activeContract && activeContract.id !== activeContractIdRef.current) {
+      activeContractIdRef.current = activeContract.id;
+      schemaState.setProtocol(activeContract.edited || activeContract.original || null);
+    }
+  }, [activeContract, schemaState]);
+
+  // Whenever schemaState.edited changes within the current contract, sync it back into workspace.contracts
+  useEffect(() => {
+    if (!schemaState.edited) return;
+    setWorkspace((prevWs) => {
+      const contract = prevWs.contracts.find((c) => c.id === prevWs.activeContractId);
+      if (contract && contract.edited === schemaState.edited) {
+        return prevWs;
+      }
+      return {
+        ...prevWs,
+        contracts: prevWs.contracts.map((c) =>
+          c.id === prevWs.activeContractId ? { ...c, edited: schemaState.edited } : c
+        ),
+        edited: schemaState.edited,
+      };
+    });
+  }, [schemaState.edited]);
+
+  // Calculate live diff annotations between original and edited schemas of active contract
   const diffResult = useMemo(() => {
-    return computeDiff(schemaState.original, schemaState.edited);
-  }, [schemaState.original, schemaState.edited]);
+    const orig = activeContract?.original ?? schemaState.original;
+    const edit = schemaState.edited;
+    return computeDiff(orig, edit);
+  }, [activeContract?.original, schemaState.original, schemaState.edited]);
 
   const handleExplicitSave = async () => {
     if (!schemaState.edited) return;
     setIsSaving(true);
     try {
+      const currentWs = workspaceRef.current;
+      const updatedContracts = currentWs.contracts.map((c) =>
+        c.id === currentWs.activeContractId ? { ...c, edited: schemaState.edited } : c
+      );
       const payload: WorkspaceData = {
-        id: workspaceId,
-        name: workspaceName,
+        ...currentWs,
         savedAt: new Date().toISOString(),
         isNew: false,
-        original: schemaState.original,
+        contracts: updatedContracts,
         edited: schemaState.edited,
-        manualLinks: [],
       };
       await saveWorkspace(payload);
+      setWorkspace(payload);
       setLastSavedAt(payload.savedAt);
     } catch (err) {
       console.error('Save failed:', err);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleRenameWorkspace = (name: string) => {
+    setWorkspace((prev) => ({ ...prev, name }));
+  };
+
+  // Multi-Contract Tab Bar Handlers
+  const handleSelectContract = (id: string) => {
+    if (id === workspace.activeContractId) return;
+    setWorkspace((prev) => ({
+      ...prev,
+      activeContractId: id,
+    }));
+  };
+
+  const handleAddContract = (name: string) => {
+    const newId = `contract-${Date.now()}`;
+    const newContract: ContractItem = {
+      id: newId,
+      name,
+      original: null,
+      edited: null,
+      manualLinks: [],
+    };
+    setWorkspace((prev) => ({
+      ...prev,
+      activeContractId: newId,
+      contracts: [...prev.contracts, newContract],
+    }));
+  };
+
+  const handleRenameContract = (id: string, name: string) => {
+    setWorkspace((prev) => ({
+      ...prev,
+      contracts: prev.contracts.map((c) => (c.id === id ? { ...c, name } : c)),
+    }));
+  };
+
+  const handleRemoveContract = (id: string) => {
+    setWorkspace((prev) => {
+      if (prev.contracts.length <= 1) return prev;
+      const idx = prev.contracts.findIndex((c) => c.id === id);
+      const remaining = prev.contracts.filter((c) => c.id !== id);
+      let nextActiveId = prev.activeContractId;
+      if (prev.activeContractId === id) {
+        const nextActive = remaining[Math.max(0, idx - 1)] || remaining[0];
+        nextActiveId = nextActive.id;
+      }
+      return {
+        ...prev,
+        activeContractId: nextActiveId,
+        contracts: remaining,
+      };
+    });
   };
 
   const handleExportAvdl = () => {
@@ -128,19 +252,32 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${schemaState.edited.protocol || 'schema'}.avdl`;
+    const baseName = activeContract?.name?.replace(/\.[^/.]+$/, '') || schemaState.edited.protocol || 'schema';
+    a.download = `${baseName}.avdl`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const handleImportProtocol = (proto: AvroProtocol) => {
     schemaState.setProtocol(proto);
+    setWorkspace((prev) => ({
+      ...prev,
+      contracts: prev.contracts.map((c) =>
+        c.id === prev.activeContractId ? { ...c, original: proto, edited: proto } : c
+      ),
+      original: proto,
+      edited: proto,
+    }));
   };
 
   const handleNewWorkspace = () => {
-    const newId = `ws-${Date.now()}`;
-    setWorkspaceId(newId);
-    setWorkspaceName('Untitled Workspace');
+    const newWs = createDefaultWorkspace(`ws-${Date.now()}`, 'Untitled Workspace', userId || undefined);
+    newWs.contracts[0].name = 'OrderService.avdl';
+    newWs.contracts[0].original = DEFAULT_PROTOCOL;
+    newWs.contracts[0].edited = DEFAULT_PROTOCOL;
+    newWs.original = DEFAULT_PROTOCOL;
+    newWs.edited = DEFAULT_PROTOCOL;
+    setWorkspace(newWs);
     setLastSavedAt(undefined);
     schemaState.setProtocol(DEFAULT_PROTOCOL);
   };
@@ -149,8 +286,8 @@ export function App() {
     <div className="flex flex-col h-screen w-screen bg-gray-950 text-gray-100 overflow-hidden font-sans">
       {/* Header Bar */}
       <Header
-        workspaceName={workspaceName}
-        onRenameWorkspace={setWorkspaceName}
+        workspaceName={workspace.name}
+        onRenameWorkspace={handleRenameWorkspace}
         isSaving={isSaving}
         lastSavedAt={lastSavedAt}
         canUndo={schemaState.canUndo}
@@ -168,6 +305,16 @@ export function App() {
         onNewWorkspace={handleNewWorkspace}
         userId={userId}
         onOpenUserModal={() => setIsUserModalOpen(true)}
+      />
+
+      {/* Multi-Contract Tab Bar */}
+      <ContractTabBar
+        contracts={workspace.contracts}
+        activeContractId={workspace.activeContractId}
+        onSelectContract={handleSelectContract}
+        onAddContract={handleAddContract}
+        onRenameContract={handleRenameContract}
+        onRemoveContract={handleRemoveContract}
       />
 
       {/* Diff Stats Banner */}
@@ -275,13 +422,7 @@ export function App() {
       <ContractExportModal
         isOpen={isContractSchemaOpen}
         onClose={() => setIsContractSchemaOpen(false)}
-        contract={{
-          id: 'contract-active',
-          name: workspaceName || 'contract',
-          original: schemaState.original,
-          edited: schemaState.edited,
-          manualLinks: [],
-        }}
+        contract={activeContract}
       />
 
       {/* User Identity Modal */}
