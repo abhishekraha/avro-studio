@@ -1,0 +1,205 @@
+import React, { useState } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Trash2, Edit2, Check, X } from 'lucide-react';
+import type { AvroField, AvroSchemaType, PrimitiveType } from '../../../core/types/schema';
+import type { LinkType } from '../../../core/types/linkage';
+import { PRIMITIVE_TYPES } from '../../../core/types/schema';
+import { formatAvdlType } from '../../../core/serializer/avdlSerializer';
+
+export interface SortableFieldProps {
+  recordName: string;
+  field: AvroField;
+  diffStatus?: LinkType | 'unchanged';
+  onRename: (newName: string) => void;
+  onUpdateType: (newType: AvroSchemaType) => void;
+  onRemove: () => void;
+  availableNamedTypes: string[];
+}
+
+export const SortableField: React.FC<SortableFieldProps> = ({
+  recordName: _recordName,
+  field,
+  diffStatus,
+  onRename,
+  onUpdateType,
+  onRemove,
+  availableNamedTypes,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: field.id });
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(field.name);
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  const handleNameSave = () => {
+    setIsEditingName(false);
+    if (nameValue.trim() && nameValue.trim() !== field.name) {
+      onRename(nameValue.trim());
+    } else {
+      setNameValue(field.name);
+    }
+  };
+
+  const currentTypeString = formatAvdlType(field.type);
+
+  const renderBadge = () => {
+    switch (diffStatus) {
+      case 'added':
+        return (
+          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+            added
+          </span>
+        );
+      case 'moved':
+        return (
+          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-sky-950 text-sky-400 border border-sky-800">
+            moved-in
+          </span>
+        );
+      case 'moved-renamed':
+        return (
+          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-purple-950 text-purple-400 border border-purple-800">
+            moved-renamed
+          </span>
+        );
+      case 'type-changed':
+        return (
+          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-amber-950 text-amber-400 border border-amber-800">
+            type-changed
+          </span>
+        );
+      case 'renamed':
+        return (
+          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
+            renamed
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group px-3 py-2 flex items-center justify-between text-xs bg-gray-900 border border-gray-800/80 rounded-lg hover:border-gray-700 transition shadow-sm ${
+        isDragging ? 'shadow-lg border-indigo-500' : ''
+      }`}
+    >
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        {/* Drag Handle */}
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-500 hover:text-gray-300 rounded"
+          title="Drag to reorder or move across records"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Stable synthetic ID pill */}
+        <span className="text-[10px] text-gray-500 font-mono select-none px-1 py-0.5 bg-gray-800/60 rounded">
+          {field.id}
+        </span>
+
+        {/* Field name (in-place editable) */}
+        {isEditingName ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={nameValue}
+              onChange={(e) => setNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleNameSave();
+                if (e.key === 'Escape') {
+                  setNameValue(field.name);
+                  setIsEditingName(false);
+                }
+              }}
+              autoFocus
+              className="bg-gray-800 text-gray-100 font-mono text-xs px-2 py-0.5 rounded border border-indigo-500 focus:outline-none"
+            />
+            <button
+              onClick={handleNameSave}
+              className="p-1 hover:text-emerald-400 text-gray-400"
+            >
+              <Check className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => {
+                setNameValue(field.name);
+                setIsEditingName(false);
+              }}
+              className="p-1 hover:text-rose-400 text-gray-400"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 group/name">
+            <span className="font-mono font-medium text-gray-200">{field.name}</span>
+            <button
+              onClick={() => setIsEditingName(true)}
+              className="opacity-0 group-hover/name:opacity-100 p-0.5 text-gray-500 hover:text-gray-300 transition"
+              title="Rename field"
+            >
+              <Edit2 className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* In-place Type selector */}
+        <select
+          value={currentTypeString}
+          onChange={(e) => onUpdateType(e.target.value as PrimitiveType)}
+          className="bg-gray-800 text-indigo-400 font-mono text-[11px] px-2 py-0.5 rounded border border-gray-700 hover:border-gray-600 focus:outline-none focus:border-indigo-500 cursor-pointer"
+        >
+          <optgroup label="Primitives">
+            {PRIMITIVE_TYPES.map((pt) => (
+              <option key={pt} value={pt}>
+                {pt}
+              </option>
+            ))}
+          </optgroup>
+          {availableNamedTypes.length > 0 && (
+            <optgroup label="Named Types">
+              {availableNamedTypes.map((nt) => (
+                <option key={nt} value={nt}>
+                  {nt}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+
+        {/* Diff badge */}
+        {renderBadge()}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+        <button
+          onClick={onRemove}
+          className="p-1 hover:bg-rose-950/60 hover:text-rose-400 text-gray-500 rounded transition"
+          title="Delete field"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};

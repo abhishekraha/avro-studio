@@ -230,7 +230,6 @@ function serializeNamedType(type: AvroNamedType, protocolNamespace?: string): st
  */
 export function serializeToAvdl(protocol: AvroProtocol): string {
   const sections: string[] = [];
-
   // Doc
   if (protocol.doc) {
     sections.push(formatDoc(protocol.doc));
@@ -260,3 +259,5 @@ export function serializeToAvdl(protocol: AvroProtocol): string {
 
   return sections.join('');
 }
+
+export const serializeAvdl = serializeToAvdl;
