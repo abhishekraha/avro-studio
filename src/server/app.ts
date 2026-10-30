@@ -3,6 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import type { WorkspaceRepository } from './db/workspaceRepository';
 import { createWorkspaceRoutes } from './routes/workspaces';
 import { createProxyRoutes } from './routes/proxy';
+import { createUserRoutes } from './routes/users';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -41,6 +42,9 @@ export function createApp(options: AppOptions) {
 
   // Mount Workspace API routes
   app.route('/api/workspaces', createWorkspaceRoutes({ repo }));
+
+  // Mount User Identity API routes
+  app.route('/api/users', createUserRoutes(repo.dbContext));
 
   // Mount Proxy API routes
   app.route('/api/proxy', createProxyRoutes());

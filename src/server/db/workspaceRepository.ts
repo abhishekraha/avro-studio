@@ -15,9 +15,9 @@ export interface WorkspaceMeta {
 }
 
 export class WorkspaceRepository {
-  constructor(private dbContext: AppDatabase) {}
+  constructor(public dbContext: AppDatabase) {}
 
-  private get db() {
+  public get db() {
     return this.dbContext.db;
   }
 

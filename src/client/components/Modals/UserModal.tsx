@@ -16,6 +16,7 @@ export const UserModal: React.FC<UserModalProps> = ({
 }) => {
   const [handle, setHandle] = useState(currentUserId || '');
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -26,17 +27,49 @@ export const UserModal: React.FC<UserModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = handle.trim();
     if (!trimmed) {
-      setError('Please enter a valid name or handle');
+      setError('Please enter a valid handle');
       return;
     }
+
+    // Validate format: letters, numbers, and - _ @
+    const validFormat = /^[a-zA-Z0-9_\-@]+$/.test(trimmed);
+    if (!validFormat) {
+      setError('Handle can only contain letters, numbers, and - _ @ without spaces');
+      return;
+    }
+
+    setIsSubmitting(true);
     setError(null);
-    onSave(trimmed);
-    if (onClose) {
-      onClose();
+
+    try {
+      const res = await fetch('/api/users/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          handle: trimmed,
+          currentHandle: currentUserId || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Failed to claim handle');
+        setIsSubmitting(false);
+        return;
+      }
+
+      onSave(trimmed);
+      if (onClose) {
+        onClose();
+      }
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Server error claiming handle');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

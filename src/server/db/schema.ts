@@ -43,6 +43,15 @@ export const stats = sqliteTable('stats', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
+export const users = sqliteTable('users', {
+  handle: text('handle').primaryKey(),
+  displayName: text('display_name'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+});
+
+export type UserSelect = typeof users.$inferSelect;
+export type UserInsert = typeof users.$inferInsert;
+
 export type WorkspaceSelect = typeof workspaces.$inferSelect;
 export type WorkspaceInsert = typeof workspaces.$inferInsert;
 export type WorkspaceRevisionSelect = typeof workspaceRevisions.$inferSelect;
