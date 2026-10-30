@@ -34,6 +34,30 @@ export class UserIdentityManager {
         this.currentUserId = null;
       }
     }
+
+    // If no user handle set yet, fetch server machine hint or fallback to platform
+    if (!this.currentUserId && typeof window !== 'undefined') {
+      // Async claim or hint fetch
+      fetch('/api/users/client-hint')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.defaultHandle && !this.currentUserId) {
+            this.setUserId(data.defaultHandle);
+          }
+        })
+        .catch(() => {
+          // Fallback if network offline
+          if (!this.currentUserId) {
+            const nav = window.navigator as { userAgentData?: { platform?: string } };
+            const platform = (nav.userAgentData?.platform || window.navigator.platform || 'device')
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, '');
+            const fallbackName = `${platform || 'client'}-${Math.random().toString(36).substring(2, 6)}`;
+            this.setUserId(fallbackName);
+          }
+        });
+    }
+
     this.initialized = true;
   }
 

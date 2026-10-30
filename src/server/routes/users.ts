@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import os from 'node:os';
 import { eq } from 'drizzle-orm';
 import { users, workspaces } from '../db/schema';
 import type { AppDatabase } from '../db/client';
@@ -18,6 +19,36 @@ const registerSchema = z.object({
 
 export function createUserRoutes(dbContext: AppDatabase) {
   const router = new Hono();
+
+  // GET /api/users/client-hint - Cross-platform default handle based on machine hostname
+  router.get('/client-hint', (c) => {
+    // Cross-platform machine name: works across Mac, Windows, Linux
+    // os.hostname() gives device name (e.g. 'Hayate' on Windows, 'MacBook-Pro.local' on Mac, 'ubuntu-box' on Linux)
+    const rawHostname =
+      process.env.AVRO_MACHINE_NAME ||
+      process.env.COMPUTERNAME ||
+      process.env.HOSTNAME ||
+      os.hostname() ||
+      '';
+
+    // Strip domain suffixes (e.g., .local, .lan, .internal) and sanitize to allowed handle characters
+    const cleanHostname = rawHostname
+      .split('.')[0]
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-zA-Z0-9_\-@]/g, '-');
+
+    const defaultHandle = cleanHostname && cleanHostname.length >= 2
+      ? cleanHostname.slice(0, 30)
+      : 'device-user';
+
+    return c.json({
+      success: true,
+      defaultHandle,
+      hostname: rawHostname,
+      platform: os.platform(), // 'win32', 'darwin', 'linux'
+    });
+  });
 
   // POST /api/users/claim - Claim or update a handle
   router.post('/claim', async (c) => {

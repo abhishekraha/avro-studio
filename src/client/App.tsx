@@ -59,9 +59,24 @@ const DEFAULT_PROTOCOL: AvroProtocol = {
   ],
 };
 
+export const ACTIVE_WORKSPACE_STORAGE_KEY = 'avro_active_workspace_id';
+
 export function App() {
-  const [workspace, setWorkspace] = useState<WorkspaceData>(() =>
-    ensureMultiContractWorkspace({
+  const [workspace, setWorkspace] = useState<WorkspaceData>(() => {
+    // Check if there is an active workspace saved in localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedWs = window.localStorage.getItem('avro_last_cached_workspace');
+        if (cachedWs) {
+          const parsed = JSON.parse(cachedWs);
+          if (parsed && parsed.id && parsed.contracts) {
+            return ensureMultiContractWorkspace(parsed);
+          }
+        }
+      } catch {}
+    }
+
+    return ensureMultiContractWorkspace({
       id: `ws-${Date.now()}`,
       name: 'E-Commerce Rebuild',
       savedAt: new Date().toISOString(),
@@ -76,8 +91,8 @@ export function App() {
           manualLinks: [],
         },
       ],
-    })
-  );
+    });
+  });
 
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [isSaving, setIsSaving] = useState(false);
@@ -92,7 +107,61 @@ export function App() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
 
   const { userId, setUserId, isInitialized } = useUserIdentity();
-  const { saveWorkspace, loadWorkspace } = useWorkspaces();
+  const { saveWorkspace, loadWorkspace, fetchWorkspaces } = useWorkspaces();
+
+  // On mount or user initialization, load the last active workspace from server or localStorage
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    let isMounted = true;
+    const restoreWorkspace = async () => {
+      try {
+        const storedWsId = typeof window !== 'undefined'
+          ? window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY)
+          : null;
+
+        if (storedWsId) {
+          const loaded = await loadWorkspace(storedWsId);
+          if (isMounted && loaded) {
+            const multiWs = ensureMultiContractWorkspace(loaded);
+            setWorkspace(multiWs);
+            setLastSavedAt(multiWs.savedAt);
+            return;
+          }
+        }
+
+        // Fallback: fetch user's workspaces and pick the latest one
+        const res = await fetch('/api/workspaces', {
+          headers: {
+            'X-User-Id': userId || '',
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.workspaces) && data.workspaces.length > 0) {
+            const latestMeta = data.workspaces[0];
+            const latest = await loadWorkspace(latestMeta.id);
+            if (isMounted && latest) {
+              const multiWs = ensureMultiContractWorkspace(latest);
+              setWorkspace(multiWs);
+              setLastSavedAt(multiWs.savedAt);
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, multiWs.id);
+                window.localStorage.setItem('avro_last_cached_workspace', JSON.stringify(multiWs));
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not restore last workspace:', err);
+      }
+    };
+
+    restoreWorkspace();
+    return () => {
+      isMounted = false;
+    };
+  }, [isInitialized, userId, loadWorkspace]);
 
   // Active contract computed from workspace
   const activeContract = useMemo(() => {
@@ -106,6 +175,13 @@ export function App() {
   const workspaceRef = useRef(workspace);
   useEffect(() => {
     workspaceRef.current = workspace;
+    // Cache to localStorage on every change so page refresh never loses uncommitted work
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspace.id);
+        window.localStorage.setItem('avro_last_cached_workspace', JSON.stringify(workspace));
+      } catch {}
+    }
   }, [workspace]);
 
   // Autosave handler callback triggered by useSchemaState debounce
@@ -127,6 +203,10 @@ export function App() {
         await saveWorkspace(payload);
         setWorkspace(payload);
         setLastSavedAt(payload.savedAt);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, payload.id);
+          window.localStorage.setItem('avro_last_cached_workspace', JSON.stringify(payload));
+        }
       } catch (err) {
         console.error('Autosave error:', err);
       } finally {
@@ -170,6 +250,12 @@ export function App() {
       };
     });
   }, [schemaState.edited]);
+
+  // Track manual linking mode state
+  const [linkingState, setLinkingState] = useState<{
+    fieldId: string;
+    isOriginal: boolean;
+  } | null>(null);
 
   // Global keyboard shortcuts: Undo, Redo, and Escape modal closer
   useEffect(() => {
@@ -881,6 +967,10 @@ export function App() {
           <section className="w-1/2 bg-gray-950 flex flex-col overflow-hidden">
             <SchemaEditor
               protocol={schemaState.edited}
+              workspaceName={workspace.name}
+              onRenameWorkspace={handleRenameWorkspace}
+              schemaVersion={schemaState.edited?.schemaVersion || '1.0.0'}
+              onUpdateSchemaVersion={schemaState.setSchemaVersion}
               annotations={diffResult.editedAnnotations}
               partnerFieldsMap={editedPartnerMap}
               linkingFieldId={linkingState?.fieldId}

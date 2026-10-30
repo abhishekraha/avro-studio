@@ -9,10 +9,14 @@ import type { LinkType } from '../../../core/types/linkage';
 import { isRecordType } from '../../../core/types/schema';
 import { SortableField } from './SortableField';
 import type { LinkedPartnerInfo } from '../SchemaViewer';
-import { Plus, Trash2, Edit3, FolderPlus, Layers } from 'lucide-react';
+import { Plus, Trash2, Edit3, FolderPlus, Layers, Tag } from 'lucide-react';
 
 export interface SchemaEditorProps {
   protocol: AvroProtocol | null;
+  workspaceName?: string;
+  onRenameWorkspace?: (name: string) => void;
+  schemaVersion?: string;
+  onUpdateSchemaVersion?: (version: string) => void;
   annotations?: Map<string, LinkType | 'unchanged'>;
   partnerFieldsMap?: Map<string, LinkedPartnerInfo>; // editedFieldId -> orig partner info
   linkingFieldId?: string | null;
@@ -299,6 +303,10 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
 
 export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   protocol,
+  workspaceName,
+  onRenameWorkspace,
+  schemaVersion = '1.0.0',
+  onUpdateSchemaVersion,
   annotations,
   partnerFieldsMap,
   linkingFieldId,
@@ -322,6 +330,60 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   const [addingFieldRecord, setAddingFieldRecord] = useState<string | null>(null);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<AvroSchemaType>('string');
+  const [isEditingVersion, setIsEditingVersion] = useState(false);
+  const [versionInput, setVersionInput] = useState(schemaVersion);
+  const [isEditingWsName, setIsEditingWsName] = useState(false);
+  const [wsNameInput, setWsNameInput] = useState(workspaceName || '');
+
+  React.useEffect(() => {
+    setVersionInput(schemaVersion);
+  }, [schemaVersion]);
+
+  React.useEffect(() => {
+    setWsNameInput(workspaceName || '');
+  }, [workspaceName]);
+
+  const bumpVersion = (type: 'major' | 'minor' | 'patch') => {
+    const semverRegex = /^v?(\d+)\.(\d+)\.(\d+)(.*)$/;
+    const match = (schemaVersion || '1.0.0').match(semverRegex);
+    let major = 1, minor = 0, patch = 0;
+    if (match) {
+      major = parseInt(match[1], 10);
+      minor = parseInt(match[2], 10);
+      patch = parseInt(match[3], 10);
+    }
+    if (type === 'major') {
+      major += 1;
+      minor = 0;
+      patch = 0;
+    } else if (type === 'minor') {
+      minor += 1;
+      patch = 0;
+    } else if (type === 'patch') {
+      patch += 1;
+    }
+    const newVer = `${major}.${minor}.${patch}`;
+    setVersionInput(newVer);
+    onUpdateSchemaVersion?.(newVer);
+  };
+
+  const handleVersionSubmit = () => {
+    setIsEditingVersion(false);
+    if (versionInput.trim() && versionInput !== schemaVersion) {
+      onUpdateSchemaVersion?.(versionInput.trim());
+    } else {
+      setVersionInput(schemaVersion);
+    }
+  };
+
+  const handleWsNameSubmit = () => {
+    setIsEditingWsName(false);
+    if (wsNameInput.trim() && wsNameInput !== workspaceName && onRenameWorkspace) {
+      onRenameWorkspace(wsNameInput.trim());
+    } else {
+      setWsNameInput(workspaceName || '');
+    }
+  };
 
   if (!protocol) {
     return (
@@ -355,63 +417,153 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-4 space-y-6">
-      {/* Header / Protocol Info */}
-      <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-        <div>
-          <div className="flex items-center gap-2 text-xs text-emerald-400 font-mono uppercase tracking-wider">
-            <span>Working Copy</span>
+      {/* Header / Protocol & Working Copy Controls */}
+      <div className="flex flex-col gap-3 border-b border-gray-800 pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="px-2 py-0.5 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 rounded uppercase tracking-wider">
+              Working Copy
+            </span>
+
+            {/* Editable Workspace Name */}
+            {isEditingWsName ? (
+              <input
+                type="text"
+                className="bg-gray-850 text-gray-100 text-sm font-semibold px-2 py-1 rounded border border-indigo-500 focus:outline-none"
+                value={wsNameInput}
+                onChange={(e) => setWsNameInput(e.target.value)}
+                onBlur={handleWsNameSubmit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleWsNameSubmit();
+                  if (e.key === 'Escape') {
+                    setWsNameInput(workspaceName || '');
+                    setIsEditingWsName(false);
+                  }
+                }}
+                autoFocus
+              />
+            ) : (
+              <button
+                onClick={() => setIsEditingWsName(true)}
+                className="text-base font-bold text-gray-100 hover:text-indigo-400 px-1.5 py-0.5 rounded hover:bg-gray-800/60 transition"
+                title="Click to rename workspace"
+              >
+                {workspaceName || 'Untitled Workspace'}
+              </button>
+            )}
+
+            <span className="text-gray-600">/</span>
+            <span className="text-sm font-mono text-gray-300 font-medium">{protocol.protocol}</span>
           </div>
-          <h2 className="text-lg font-bold text-gray-100">{protocol.protocol}</h2>
+
+          {/* Add Record button */}
+          {!isAddingRecord ? (
+            <button
+              onClick={() => setIsAddingRecord(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/80 rounded-lg transition"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              <span>Add Record</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Record name..."
+                value={newRecordName}
+                onChange={(e) => setNewRecordName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateRecord();
+                  if (e.key === 'Escape') setIsAddingRecord(false);
+                }}
+                autoFocus
+                className="bg-gray-800 text-xs px-2.5 py-1 rounded border border-emerald-500 text-gray-100 focus:outline-none"
+              />
+              <input
+                type="text"
+                placeholder="namespace (optional)..."
+                value={newRecordNamespace}
+                onChange={(e) => setNewRecordNamespace(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateRecord();
+                  if (e.key === 'Escape') setIsAddingRecord(false);
+                }}
+                className="bg-gray-800 text-xs px-2.5 py-1 rounded border border-gray-700 font-mono text-gray-300 focus:outline-none w-36"
+              />
+              <button
+                onClick={handleCreateRecord}
+                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs"
+              >
+                Add
+              </button>
+              <button
+                onClick={() => setIsAddingRecord(false)}
+                className="px-2 py-1 bg-gray-800 text-gray-400 hover:text-white rounded text-xs"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Add Record button */}
-        {!isAddingRecord ? (
-          <button
-            onClick={() => setIsAddingRecord(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-800/80 rounded-lg transition"
-          >
-            <FolderPlus className="w-3.5 h-3.5" />
-            <span>Add Record</span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
+        {/* Major / Minor / Patch Version Incrementor Controls */}
+        <div className="flex items-center gap-2 bg-gray-900/60 px-3 py-1.5 rounded-lg border border-gray-800/80 w-fit">
+          <Tag className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="text-xs text-gray-400 font-medium select-none">Schema Version:</span>
+
+          {isEditingVersion ? (
             <input
               type="text"
-              placeholder="Record name..."
-              value={newRecordName}
-              onChange={(e) => setNewRecordName(e.target.value)}
+              value={versionInput}
+              onChange={(e) => setVersionInput(e.target.value)}
+              onBlur={handleVersionSubmit}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateRecord();
-                if (e.key === 'Escape') setIsAddingRecord(false);
+                if (e.key === 'Enter') handleVersionSubmit();
+                if (e.key === 'Escape') {
+                  setVersionInput(schemaVersion);
+                  setIsEditingVersion(false);
+                }
               }}
               autoFocus
-              className="bg-gray-800 text-xs px-2.5 py-1 rounded border border-emerald-500 text-gray-100 focus:outline-none"
+              className="w-16 bg-gray-800 text-white font-mono text-xs px-1.5 py-0.5 rounded border border-indigo-500 focus:outline-none text-center"
             />
-            <input
-              type="text"
-              placeholder="namespace (optional)..."
-              value={newRecordNamespace}
-              onChange={(e) => setNewRecordNamespace(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateRecord();
-                if (e.key === 'Escape') setIsAddingRecord(false);
-              }}
-              className="bg-gray-800 text-xs px-2.5 py-1 rounded border border-gray-700 font-mono text-gray-300 focus:outline-none w-36"
-            />
+          ) : (
             <button
-              onClick={handleCreateRecord}
-              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs"
+              onClick={() => setIsEditingVersion(true)}
+              className="text-xs font-mono font-bold text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-800/80 px-2 py-0.5 rounded transition"
+              title="Click to edit version directly"
             >
-              Add
+              v{schemaVersion}
+            </button>
+          )}
+
+          <div className="h-3.5 w-px bg-gray-800 mx-1" />
+
+          {/* Quick Increment buttons */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => bumpVersion('patch')}
+              className="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition"
+              title="Bump patch (+0.0.1)"
+            >
+              +patch
             </button>
             <button
-              onClick={() => setIsAddingRecord(false)}
-              className="px-2 py-1 bg-gray-800 text-gray-400 hover:text-white rounded text-xs"
+              onClick={() => bumpVersion('minor')}
+              className="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition"
+              title="Bump minor (+0.1.0)"
             >
-              Cancel
+              +minor
+            </button>
+            <button
+              onClick={() => bumpVersion('major')}
+              className="px-1.5 py-0.5 text-[10px] font-mono font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition"
+              title="Bump major (+1.0.0)"
+            >
+              +major
             </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Record list with droppable cards */}
