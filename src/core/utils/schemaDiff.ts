@@ -95,8 +95,14 @@ interface FieldLocation {
 }
 
 /**
- * Computes structural differences between original and edited schemas using
- * synthetic field IDs ('id') and manual link overrides.
+ * Computes structural differences between original and edited schemas.
+ * 
+ * Tracking algorithm:
+ * 1. Checks explicit manualLinks (`editedFieldId -> originalFieldId`) first.
+ * 2. Checks matching synthetic IDs (`field.id === originalField.id`).
+ * 3. Fallback tracking: uses canonical semantic key `${recordName}.${fieldName}`
+ *    so fields with newly generated IDs or reloaded schemas in the same record
+ *    are accurately recognized as unchanged rather than spuriously marked unlinked/added/deleted.
  */
 export function computeDiff(
   original: AvroProtocol | null,
@@ -108,6 +114,9 @@ export function computeDiff(
   const recMap = normalizePairMap(recordLinks);     // editedRecordName -> originalRecordName
 
   const origFields = new Map<string, FieldLocation>();
+  // Semantic key lookup: `${recordName}.${fieldName}` -> originalFieldId
+  const origByRecordField = new Map<string, string>();
+
   if (original?.types) {
     for (const type of original.types) {
       if (isRecordType(type)) {
@@ -116,6 +125,10 @@ export function computeDiff(
             recordName: type.name,
             field,
           });
+          const key = `${type.name.toLowerCase()}.${field.name.toLowerCase()}`;
+          if (!origByRecordField.has(key)) {
+            origByRecordField.set(key, field.id);
+          }
         }
       }
     }
@@ -150,12 +163,21 @@ export function computeDiff(
 
   // Process edited fields
   for (const [editedId, editedLoc] of editedFields.entries()) {
-    // Determine corresponding original ID: manual link takes precedence
+    // 1. Explicit manual link takes precedence
     let targetOrigId: string | undefined;
     if (manualMap.has(editedId)) {
       targetOrigId = manualMap.get(editedId);
-    } else if (origFields.has(editedId)) {
+    } else if (origFields.has(editedId) && !matchedOrigIds.has(editedId)) {
+      // 2. Exact synthetic ID match if not already matched
       targetOrigId = editedId;
+    } else {
+      // 3. Fallback: match by canonical record.field name
+      const effectiveOrigRecordName = recMap.get(editedLoc.recordName) || editedLoc.recordName;
+      const semanticKey = `${effectiveOrigRecordName.toLowerCase()}.${editedLoc.field.name.toLowerCase()}`;
+      const candidateOrigId = origByRecordField.get(semanticKey);
+      if (candidateOrigId && !matchedOrigIds.has(candidateOrigId)) {
+        targetOrigId = candidateOrigId;
+      }
     }
 
     if (!targetOrigId || !origFields.has(targetOrigId)) {
@@ -170,8 +192,8 @@ export function computeDiff(
 
     // Check if record matches (either same name or mapped via recordLinks)
     const effectiveOrigRecordName = recMap.get(editedLoc.recordName) || editedLoc.recordName;
-    const sameRecord = origLoc.recordName === effectiveOrigRecordName;
-    const sameName = origLoc.field.name === editedLoc.field.name;
+    const sameRecord = origLoc.recordName.toLowerCase() === effectiveOrigRecordName.toLowerCase();
+    const sameName = origLoc.field.name.toLowerCase() === editedLoc.field.name.toLowerCase();
     const sameType = areTypesEqual(origLoc.field.type, editedLoc.field.type);
 
     let status: LinkType | 'unchanged';
@@ -190,7 +212,7 @@ export function computeDiff(
       movedCount++;
       renamedCount++;
     } else {
-      // Type changed (may also have moved/renamed, but primary categorization per brief is type-changed)
+      // Type changed
       status = 'type-changed';
       modifiedCount++;
       if (!sameName) renamedCount++;

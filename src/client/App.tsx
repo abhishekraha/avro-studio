@@ -363,7 +363,22 @@ export function App() {
       }
     }
 
-    // 1. First populate matching synthetic IDs (same ID between original and edited)
+    // 1. First populate matching synthetic IDs OR matching canonical record.field name
+    const origByRecordField = new Map<string, { id: string; name: string; recordName: string }>();
+    if (origProto?.types) {
+      for (const t of origProto.types) {
+        if (isRecordType(t)) {
+          for (const f of t.fields) {
+            origByRecordField.set(`${t.name.toLowerCase()}.${f.name.toLowerCase()}`, {
+              id: f.id,
+              name: f.name,
+              recordName: t.name,
+            });
+          }
+        }
+      }
+    }
+
     if (origProto?.types && editProto?.types) {
       for (const origType of origProto.types) {
         if (isRecordType(origType)) {
@@ -380,6 +395,30 @@ export function App() {
                 fieldName: origField.name,
                 recordName: origType.name,
               });
+            }
+          }
+        }
+      }
+
+      // Also check canonical match: same record name + same field name
+      for (const editType of editProto.types) {
+        if (isRecordType(editType)) {
+          for (const editField of editType.fields) {
+            if (!editMap.has(editField.id)) {
+              const semanticKey = `${editType.name.toLowerCase()}.${editField.name.toLowerCase()}`;
+              const origMatch = origByRecordField.get(semanticKey);
+              if (origMatch && !origMap.has(origMatch.id)) {
+                origMap.set(origMatch.id, {
+                  fieldId: editField.id,
+                  fieldName: editField.name,
+                  recordName: editType.name,
+                });
+                editMap.set(editField.id, {
+                  fieldId: origMatch.id,
+                  fieldName: origMatch.name,
+                  recordName: origMatch.recordName,
+                });
+              }
             }
           }
         }
@@ -456,6 +495,18 @@ export function App() {
       }
     }
 
+    // Canonical record.field matching for connections when IDs differ
+    const origByRecordField = new Map<string, string>();
+    if (origProto.types) {
+      for (const t of origProto.types) {
+        if (isRecordType(t)) {
+          for (const f of t.fields) {
+            origByRecordField.set(`${t.name.toLowerCase()}.${f.name.toLowerCase()}`, f.id);
+          }
+        }
+      }
+    }
+
     if (editProto.types) {
       for (const t of editProto.types) {
         if (isRecordType(t)) {
@@ -475,6 +526,22 @@ export function App() {
                   editElementId: `field-edit-${f.id}`,
                   isManual: false,
                 });
+              }
+            } else if (!manualEditedIds.has(f.id)) {
+              // Check canonical record.field match
+              const origId = origByRecordField.get(`${t.name.toLowerCase()}.${f.name.toLowerCase()}`);
+              if (origId && !manualOrigIds.has(origId)) {
+                const pairKey = `${origId}::${f.id}`;
+                if (!seen.has(pairKey)) {
+                  seen.add(pairKey);
+                  list.push({
+                    originalFieldId: origId,
+                    editedFieldId: f.id,
+                    origElementId: `field-orig-${origId}`,
+                    editElementId: `field-edit-${f.id}`,
+                    isManual: false,
+                  });
+                }
               }
             }
           }
