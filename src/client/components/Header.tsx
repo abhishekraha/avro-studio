@@ -1,20 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Undo2,
-  Redo2,
-  Save,
-  Download,
-  Database,
-  GitCompare,
-  GitBranch,
-  FolderOpen,
-  Plus,
-  RefreshCw,
-  CheckCircle2,
-  Code2,
-  User,
-  FileCode2,
-  Tag,
+  CheckCircle2, Code2, Database, Download, Ellipsis, FileCode2, FolderOpen,
+  GitBranch, GitCompare, Plus, RefreshCw, Redo2, Save, Tag, Triangle, Undo2
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -45,345 +32,135 @@ export interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  workspaceName,
-  onRenameWorkspace,
-  isSaving,
-  lastSavedAt,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
-  onSave,
-  onExportAvdl,
-  onOpenContractSchema,
-  onExportBigQuery,
-  onExportLinkages,
-  onOpenAvdlPreview,
-  onOpenRecon,
-  onOpenImport,
-  onNewWorkspace,
-  viewMode = 'compare',
-  onToggleViewMode,
-  userId,
-  onOpenUserModal,
-  schemaVersion,
-  onUpdateSchemaVersion,
+  workspaceName, onRenameWorkspace, isSaving, lastSavedAt, canUndo, canRedo,
+  onUndo, onRedo, onSave, onExportAvdl, onOpenContractSchema, onExportBigQuery,
+  onExportLinkages, onOpenAvdlPreview, onOpenRecon, onOpenImport, onNewWorkspace,
+  viewMode = 'compare', onToggleViewMode, userId, onOpenUserModal,
+  schemaVersion, onUpdateSchemaVersion,
 }) => {
-  const [isEditingTitle, setIsEditingTitle] = React.useState(false);
-  const [titleInput, setTitleInput] = React.useState(workspaceName);
-  const [isEditingVersion, setIsEditingVersion] = React.useState(false);
-  const [versionInput, setVersionInput] = React.useState(schemaVersion || '');
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState(workspaceName);
+  const [editingVersion, setEditingVersion] = useState(false);
+  const [versionInput, setVersionInput] = useState(schemaVersion || '1.0.0');
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  React.useEffect(() => {
-    setTitleInput(workspaceName);
-  }, [workspaceName]);
+  React.useEffect(() => setTitleInput(workspaceName), [workspaceName]);
+  React.useEffect(() => setVersionInput(schemaVersion || '1.0.0'), [schemaVersion]);
 
-  React.useEffect(() => {
-    setVersionInput(schemaVersion || '');
-  }, [schemaVersion]);
-
-  const handleTitleSubmit = () => {
-    setIsEditingTitle(false);
-    if (titleInput.trim() && titleInput !== workspaceName) {
-      onRenameWorkspace(titleInput.trim());
-    } else {
-      setTitleInput(workspaceName);
-    }
+  const saveTitle = () => {
+    setEditingTitle(false);
+    if (titleInput.trim() && titleInput !== workspaceName) onRenameWorkspace(titleInput.trim());
+    else setTitleInput(workspaceName);
   };
-
-  const handleVersionSubmit = () => {
-    setIsEditingVersion(false);
-    if (onUpdateSchemaVersion && versionInput.trim() !== (schemaVersion || '')) {
-      onUpdateSchemaVersion(versionInput.trim());
-    } else {
-      setVersionInput(schemaVersion || '');
-    }
+  const saveVersion = () => {
+    setEditingVersion(false);
+    const next = versionInput.trim();
+    if (next && next !== (schemaVersion || '1.0.0')) onUpdateSchemaVersion?.(next);
+    else setVersionInput(schemaVersion || '1.0.0');
   };
-
-  const bumpVersion = (type: 'patch' | 'minor' | 'major') => {
+  const bumpVersion = (kind: 'patch' | 'minor' | 'major') => {
     if (!onUpdateSchemaVersion) return;
-    const current = schemaVersion || '1.0.0';
-    const clean = current.replace(/^v/i, '');
-    const parts = clean.split('.').map((p) => parseInt(p, 10) || 0);
+    const parts = (schemaVersion || '1.0.0').replace(/^v/i, '').split('.').map((part) => parseInt(part, 10) || 0);
     while (parts.length < 3) parts.push(0);
-
-    if (type === 'major') {
-      parts[0] += 1;
-      parts[1] = 0;
-      parts[2] = 0;
-    } else if (type === 'minor') {
-      parts[1] += 1;
-      parts[2] = 0;
-    } else if (type === 'patch') {
-      parts[2] += 1;
-    }
-    const nextVer = parts.slice(0, 3).join('.');
-    onUpdateSchemaVersion(nextVer);
+    if (kind === 'major') { parts[0] += 1; parts[1] = 0; parts[2] = 0; }
+    else if (kind === 'minor') { parts[1] += 1; parts[2] = 0; }
+    else parts[2] += 1;
+    onUpdateSchemaVersion(parts.slice(0, 3).join('.'));
   };
+
+  const extraActions = [
+    { label: 'Compare & Edit', icon: <GitCompare size={15} />, run: () => onToggleViewMode?.('compare') },
+    { label: 'Create New Mode', icon: <Code2 size={15} />, run: () => onToggleViewMode?.('create') },
+    { label: 'Import', icon: <FolderOpen size={15} />, run: onOpenImport },
+    { label: 'New Workspace', icon: <Plus size={15} />, run: onNewWorkspace },
+    { label: 'Contract Schema', icon: <FileCode2 size={15} />, run: () => onOpenContractSchema?.() },
+    { label: 'Preview AVDL', icon: <Code2 size={15} />, run: onOpenAvdlPreview },
+    ...(onExportAvdl ? [{ label: 'Export AVDL', icon: <Download size={15} />, run: onExportAvdl }] : []),
+    { label: 'Linkages', icon: <GitBranch size={15} />, run: onExportLinkages },
+    { label: 'Save', icon: <Save size={15} />, run: onSave },
+  ];
 
   return (
-    <header className="h-14 border-b border-gray-800 bg-gray-900 px-4 flex items-center justify-between select-none">
-      {/* Left: Branding & Workspace title */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 font-bold text-white tracking-wide">
-          <div className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white text-xs font-mono font-bold shadow-sm">
-            AS
-          </div>
-          <span>Avro Studio</span>
+    <header className="studio-header">
+      <div className="studio-brand-row">
+        <div className="studio-brand">
+          <span className="studio-logo"><Triangle size={21} strokeWidth={2.5} /></span>
+          <span className="studio-wordmark">Avro Studio</span>
+          <span className="studio-app-version">v2.4.0</span>
         </div>
-
-        <div className="h-5 w-px bg-gray-700 mx-1" />
-
-        {/* Editable Workspace Name */}
-        {isEditingTitle ? (
-          <input
-            type="text"
-            className="bg-gray-800 text-gray-100 text-sm px-2 py-1 rounded border border-indigo-500 focus:outline-none"
-            value={titleInput}
-            onChange={(e) => setTitleInput(e.target.value)}
-            onBlur={handleTitleSubmit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleTitleSubmit();
-              if (e.key === 'Escape') {
-                setTitleInput(workspaceName);
-                setIsEditingTitle(false);
-              }
-            }}
-            autoFocus
-          />
+        <span className="studio-header-divider" />
+        {editingTitle ? (
+          <input className="studio-workspace-input" value={titleInput} autoFocus
+            onChange={(event) => setTitleInput(event.target.value)} onBlur={saveTitle}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') saveTitle();
+              if (event.key === 'Escape') { setTitleInput(workspaceName); setEditingTitle(false); }
+            }} />
         ) : (
-          <button
-            onClick={() => setIsEditingTitle(true)}
-            className="text-sm font-medium text-gray-200 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition-colors"
-            title="Click to rename workspace"
-          >
+          <button className="studio-workspace-name" onClick={() => setEditingTitle(true)} title="Rename workspace">
             {workspaceName || 'Untitled Workspace'}
           </button>
         )}
-
-        {/* Autosave status indicator */}
-        <div className="flex items-center gap-1.5 text-xs text-gray-400 ml-1">
-          {isSaving ? (
-            <>
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
-              <span className="text-amber-400">Saving...</span>
-            </>
-          ) : lastSavedAt ? (
-            <>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-gray-400">
-                Saved {new Date(lastSavedAt).toLocaleTimeString()}
-              </span>
-            </>
-          ) : null}
+        <div className="studio-save-state" aria-live="polite">
+          {isSaving ? <><RefreshCw size={13} className="studio-spinning" /><span>Saving...</span></> :
+            lastSavedAt ? <><CheckCircle2 size={13} /><span>Saved {new Date(lastSavedAt).toLocaleTimeString()}</span></> :
+            <><CheckCircle2 size={13} /><span>Saved</span></>}
         </div>
-
-        {/* Schema Version Badge & Quick Bump Controls */}
-        <div className="flex items-center gap-1 ml-2 bg-gray-950 px-2 py-0.5 rounded border border-gray-800">
-          <Tag className="w-3 h-3 text-indigo-400" />
-          {isEditingVersion ? (
-            <input
-              type="text"
-              placeholder="e.g. 1.0.0"
-              className="bg-gray-800 text-gray-100 text-xs px-1.5 py-0.5 rounded border border-indigo-500 font-mono focus:outline-none w-20"
-              value={versionInput}
-              onChange={(e) => setVersionInput(e.target.value)}
-              onBlur={handleVersionSubmit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleVersionSubmit();
-                if (e.key === 'Escape') {
-                  setVersionInput(schemaVersion || '');
-                  setIsEditingVersion(false);
-                }
-              }}
-              autoFocus
-            />
+        <div className="studio-schema-version">
+          <Tag size={13} />
+          {editingVersion ? (
+            <input value={versionInput} autoFocus onChange={(event) => setVersionInput(event.target.value)}
+              onBlur={saveVersion} onKeyDown={(event) => {
+                if (event.key === 'Enter') saveVersion();
+                if (event.key === 'Escape') { setVersionInput(schemaVersion || '1.0.0'); setEditingVersion(false); }
+              }} aria-label="Schema version" />
           ) : (
-            <button
-              onClick={() => setIsEditingVersion(true)}
-              className="text-xs font-mono font-semibold text-indigo-300 hover:text-indigo-200 transition"
-              title="Click to edit schema version"
-            >
-              {'v' + (schemaVersion || '1.0.0')}
+            <button className="studio-version-value" onClick={() => setEditingVersion(true)} title="Edit schema version">
+              v{schemaVersion || '1.0.0'}
             </button>
           )}
+          <span className="studio-version-divider" />
+          <button onClick={() => bumpVersion('patch')} title="Bump patch version">+P</button>
+          <button onClick={() => bumpVersion('minor')} title="Bump minor version">+M</button>
+          <button onClick={() => bumpVersion('major')} title="Bump major version">+MJ</button>
+        </div>
+      </div>
 
-          {onUpdateSchemaVersion && (
-            <div className="flex items-center gap-0.5 ml-1 border-l border-gray-800 pl-1">
-              <button
-                onClick={() => bumpVersion('patch')}
-                className="px-1 py-0.5 text-[9px] font-mono text-gray-400 hover:text-indigo-300 hover:bg-gray-800 rounded transition"
-                title="Bump patch (+0.0.1)"
-              >
-                +patch
-              </button>
-              <button
-                onClick={() => bumpVersion('minor')}
-                className="px-1 py-0.5 text-[9px] font-mono text-gray-400 hover:text-indigo-300 hover:bg-gray-800 rounded transition"
-                title="Bump minor (+0.1.0)"
-              >
-                +minor
-              </button>
-              <button
-                onClick={() => bumpVersion('major')}
-                className="px-1 py-0.5 text-[9px] font-mono text-gray-400 hover:text-indigo-300 hover:bg-gray-800 rounded transition"
-                title="Bump major (+1.0.0)"
-              >
-                +major
-              </button>
+      <div className="studio-actions">
+        <div className="studio-history-actions">
+          <button onClick={onUndo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo"><Undo2 size={16} /></button>
+          <button onClick={onRedo} disabled={!canRedo} title="Redo (Ctrl+Y)" aria-label="Redo"><Redo2 size={16} /></button>
+        </div>
+        <button className="studio-action-button" onClick={onExportBigQuery} title="Generate BigQuery schema">
+          <Database size={15} /><span>BigQuery</span>
+        </button>
+        <button className="studio-action-button" onClick={onOpenRecon} title="Reconcile source and target data">
+          <GitCompare size={15} /><span>Reconcile</span>
+        </button>
+        <button className="studio-action-button studio-export-button"
+          onClick={() => onOpenContractSchema ? onOpenContractSchema() : onOpenAvdlPreview()}>
+          <FileCode2 size={15} /><span>Export Schema</span>
+        </button>
+        <div className="studio-menu-wrap">
+          <button className="studio-more-button" onClick={() => setMenuOpen(!menuOpen)} aria-label="More actions" title="More actions">
+            <Ellipsis size={18} />
+          </button>
+          {menuOpen && (
+            <div className="studio-actions-menu">
+              {extraActions.map((action) => (
+                <button key={action.label} onClick={() => { setMenuOpen(false); action.run(); }}>
+                  {action.icon}<span>{action.label}</span>
+                  {action.label === 'Compare & Edit' && viewMode === 'compare' && <i>ACTIVE</i>}
+                  {action.label === 'Create New Mode' && viewMode === 'create' && <i>ACTIVE</i>}
+                </button>
+              ))}
             </div>
           )}
         </div>
-      </div>
-
-      {/* Center: Undo / Redo controls & View Mode Switcher */}
-      <div className="flex items-center gap-3">
-        {onToggleViewMode && (
-          <div className="flex items-center bg-gray-950 p-0.5 rounded-lg border border-gray-800 text-xs">
-            <button
-              onClick={() => onToggleViewMode('compare')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium transition ${
-                viewMode === 'compare'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-850'
-              }`}
-              title="Compare and restructure against original baseline"
-            >
-              <GitCompare className="w-3.5 h-3.5" />
-              <span>Compare & Edit</span>
-            </button>
-            <button
-              onClick={() => onToggleViewMode('create')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium transition ${
-                viewMode === 'create'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-850'
-              }`}
-              title="Build Avro schema from scratch in full editor view"
-            >
-              <Code2 className="w-3.5 h-3.5" />
-              <span>Create New Mode</span>
-            </button>
-          </div>
-        )}
-
-        <div className="flex items-center gap-1 bg-gray-950 p-1 rounded-lg border border-gray-800">
-          <button
-            onClick={onUndo}
-            disabled={!canUndo}
-            className="p-1.5 rounded hover:bg-gray-800 text-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onRedo}
-            disabled={!canRedo}
-            className="p-1.5 rounded hover:bg-gray-800 text-gray-300 disabled:opacity-30 disabled:hover:bg-transparent transition"
-            title="Redo (Ctrl+Y)"
-          >
-            <Redo2 className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Right: Actions */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onOpenImport}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-          title="Import schema from URL or text"
-        >
-          <FolderOpen className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Import</span>
-        </button>
-
-        <button
-          onClick={onNewWorkspace}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-          title="Create clean empty workspace"
-        >
-          <Plus className="w-3.5 h-3.5 text-emerald-400" />
-          <span>New</span>
-        </button>
-
-        {onOpenContractSchema ? (
-          <button
-            onClick={onOpenContractSchema}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded transition shadow-sm border border-indigo-500"
-            title="Inspect, copy, or download contract schema (AVDL & AVSC)"
-          >
-            <FileCode2 className="w-3.5 h-3.5" />
-            <span>Contract Schema</span>
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={onOpenAvdlPreview}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-              title="Preview side-by-side original and restructured AVDL"
-            >
-              <Code2 className="w-3.5 h-3.5 text-blue-400" />
-              <span>Preview AVDL</span>
-            </button>
-
-            {onExportAvdl && (
-              <button
-                onClick={onExportAvdl}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-                title="Export AVDL schema file"
-              >
-                <Download className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Export AVDL</span>
-              </button>
-            )}
-          </>
-        )}
-
-        <button
-          onClick={onExportBigQuery}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-          title="Generate BigQuery table schema"
-        >
-          <Database className="w-3.5 h-3.5 text-amber-400" />
-          <span>BigQuery</span>
-        </button>
-
-        <button
-          onClick={onExportLinkages}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-          title="View and export migration linkage JSON"
-        >
-          <GitBranch className="w-3.5 h-3.5 text-purple-400" />
-          <span>Linkages</span>
-        </button>
-
-        <button
-          onClick={onOpenRecon}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-200 bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700"
-          title="Reconcile source and target data against linkages"
-        >
-          <GitCompare className="w-3.5 h-3.5 text-teal-400" />
-          <span>Recon</span>
-        </button>
-
-        <button
-          onClick={onSave}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded transition shadow-sm"
-          title="Save workspace"
-        >
-          <Save className="w-3.5 h-3.5" />
-          <span>Save</span>
-        </button>
-
         {onOpenUserModal && (
-          <button
-            onClick={onOpenUserModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded transition border border-gray-700 ml-1"
-            title={userId ? `Signed in as ${userId} - Click to switch` : 'Set user identity'}
-          >
-            <User className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="max-w-[100px] truncate">{userId || 'User'}</span>
+          <button className="studio-user-button" onClick={onOpenUserModal} title={userId ? 'Signed in as ' + userId : 'Set user identity'}>
+            <span className="studio-user-avatar">{(userId || 'AJ').slice(0, 2).toUpperCase()}</span>
+            <span>{userId || 'User'}</span>
           </button>
         )}
       </div>

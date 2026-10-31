@@ -58,7 +58,7 @@
         </div>
         <div>
           <span class="text-xl font-bold tracking-tight text-white">Avro <span class="text-brand-400">Studio</span></span>
-          <span class="ml-2 px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-brand-300 border border-slate-700">v2.4.0</span>
+          <span class="ml-2 px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-brand-300 border border-slate-700">v1.0.0</span>
         </div>
       </div>
 
@@ -72,7 +72,7 @@
       </nav>
 
       <div class="flex items-center space-x-4">
-        <a href="https://github.com/example/avro-studio" target="_blank" rel="noopener noreferrer"
+        <a href="https://github.com/abhishekraha/avro-studio" target="_blank" rel="noopener noreferrer"
            class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
           <i class="fa-brands fa-github mr-2"></i> GitHub
         </a>
@@ -97,23 +97,13 @@
         </p>
 
         <div class="mt-8 flex flex-col sm:flex-row justify-center gap-4">
-          <a href="#preview" class="inline-flex items-center justify-center px-6 py-3 rounded-lg text-base font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-600/30 transition">
-            <i class="fa-solid fa-play mr-2 text-xs"></i> Explore UI Preview
+          <a href="#features" class="inline-flex items-center justify-center px-6 py-3 rounded-lg text-base font-semibold text-white bg-brand-600 hover:bg-brand-500 shadow-lg shadow-brand-600/30 transition">
+            <i class="fa-solid fa-list-check mr-2 text-xs"></i> Explore Features
           </a>
           <a href="#docker" class="inline-flex items-center justify-center px-6 py-3 rounded-lg text-base font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
             <i class="fa-solid fa-terminal mr-2 text-xs text-brand-400"></i> Run with Docker
           </a>
         </div>
-      </div>
-
-      <!-- MAIN APP SCREENSHOT / SVG PREVIEW -->
-      <div id="preview" class="mt-14 relative rounded-xl border border-slate-800 bg-slate-900/60 p-2 sm:p-4 glow-indigo">
-        <div class="rounded-lg overflow-hidden border border-slate-800">
-          <img src="assets/app-preview.svg" alt="Avro Studio Dual-Pane Restructurer Interface" class="w-full h-auto block" />
-        </div>
-        <p class="mt-3 text-center text-xs sm:text-sm text-slate-400">
-          <strong class="text-slate-200">Interactive Dual-Pane Restructurer:</strong> Original Registry Schema (left) connected via SVG bezier curves to Working Copy (right), featuring explicit cross-record movement of <code class="text-amber-400">customerId</code> to <code class="text-sky-400">OrderSummary</code>.
-        </p>
       </div>
     </div>
   </section>
@@ -478,7 +468,7 @@ docker run -d -p 3000:3000 -v avro-data:/data --name avro-studio avro-studio:lat
             <i class="fa-brands fa-node-js text-emerald-400 text-lg mr-2"></i> Local Development Setup
           </h4>
           <pre class="bg-slate-950 p-4 rounded-lg overflow-x-auto text-xs text-slate-200 border border-slate-800 font-mono"><code># Clone and install dependencies
-git clone https://github.com/example/avro-studio.git
+git clone https://github.com/abhishekraha/avro-studio.git
 cd avro-studio
 npm install
 
@@ -506,11 +496,10 @@ npm start</code></pre>
         <span>— Released under Apache-2.0 License</span>
       </div>
       <div class="flex space-x-6 text-slate-400">
-        <a href="#preview" class="hover:text-white transition">UI Preview</a>
         <a href="#features" class="hover:text-white transition">Features</a>
         <a href="#architecture" class="hover:text-white transition">Architecture</a>
         <a href="#shortcuts" class="hover:text-white transition">Shortcuts</a>
-        <a href="https://github.com/example/avro-studio" target="_blank" rel="noopener noreferrer" class="hover:text-white transition">GitHub Repo</a>
+        <a href="https://github.com/abhishekraha/avro-studio" target="_blank" rel="noopener noreferrer" class="hover:text-white transition">GitHub Repo</a>
       </div>
     </div>
   </footer>

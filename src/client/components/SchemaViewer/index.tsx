@@ -4,7 +4,8 @@ import type { AvroProtocol, AvroRecordType, AvroField } from '../../../core/type
 import type { LinkType } from '../../../core/types/linkage';
 import { isRecordType } from '../../../core/types/schema';
 import { formatAvdlType } from '../../../core/serializer/avdlSerializer';
-import { BookOpen, FileText, GripVertical, Link as LinkIcon, X as XIcon, Copy, Link2 } from 'lucide-react';
+import { BookOpen, GripVertical, Link as LinkIcon, X as XIcon, Copy, Link2 } from 'lucide-react';
+import { displayFieldStatus, fieldStatusLabel } from '../fieldStatus';
 
 export interface LinkedPartnerInfo {
   fieldId: string;
@@ -73,62 +74,7 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
       }
     : undefined;
 
-  const renderBadge = (status?: LinkType | 'unchanged') => {
-    switch (status) {
-      case 'deleted':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-rose-950 text-rose-400 border border-rose-800">
-            deleted
-          </span>
-        );
-      case 'moved':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-sky-950 text-sky-400 border border-sky-800">
-            moved-out
-          </span>
-        );
-      case 'moved-renamed':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-purple-950 text-purple-400 border border-purple-800">
-            moved-renamed
-          </span>
-        );
-      case 'type-changed':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-amber-950 text-amber-400 border border-amber-800">
-            type-changed
-          </span>
-        );
-      case 'renamed':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
-            renamed
-          </span>
-        );
-      default:
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded text-gray-500">
-            unchanged
-          </span>
-        );
-    }
-  };
-
-  const getRowDiffStyle = (status?: LinkType | 'unchanged') => {
-    switch (status) {
-      case 'deleted':
-        return 'bg-rose-950/20 border-l-2 border-l-rose-500 line-through opacity-75';
-      case 'moved':
-      case 'moved-renamed':
-        return 'bg-sky-950/20 border-l-2 border-l-sky-500';
-      case 'type-changed':
-        return 'bg-amber-950/20 border-l-2 border-l-amber-500';
-      case 'renamed':
-        return 'bg-indigo-950/20 border-l-2 border-l-indigo-500';
-      default:
-        return 'border-l-2 border-l-transparent';
-    }
-  };
+  const displayStatus = displayFieldStatus(diffStatus);
 
   return (
     <div
@@ -136,28 +82,20 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
       id={`field-orig-${field.id}`}
       style={style}
       onClick={onSelect}
-      className={`group px-3 py-2 flex items-center justify-between text-xs transition-all cursor-pointer hover:bg-gray-800/40 ${getRowDiffStyle(
-        diffStatus
-      )} ${isDragging ? 'shadow-lg border-indigo-500 bg-gray-900/90' : ''} ${
+      data-status={displayStatus}
+      className={`studio-field-row group px-3 py-2 flex items-center justify-between text-xs transition-all cursor-pointer hover:bg-gray-800/40 ${isDragging ? 'shadow-lg border-indigo-500 bg-gray-900/90' : ''} ${
         isSelected ? 'bg-indigo-950/40 ring-1 ring-cyan-400 shadow-md' : ''
       }`}
     >
       <div className="flex items-center gap-2 flex-1 min-w-0">
         {/* Drag Handle */}
-        <button
-          {...attributes}
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing p-0.5 text-gray-500 hover:text-gray-300 rounded"
-          title="Drag field to copy & link into target record"
-        >
-          <GripVertical className="w-3.5 h-3.5" />
-        </button>
+        <span className="studio-field-dot" aria-hidden="true" />
 
-        <span className="text-[10px] text-gray-600 font-mono select-none px-1 py-0.2 rounded bg-gray-800/40">
+        <span className="studio-field-id text-[10px] text-gray-600 font-mono select-none px-1 py-0.2 rounded bg-gray-800/40">
           {field.id}
         </span>
-        <span className="font-medium text-gray-200 font-mono">{field.name}</span>
-        <span className="text-indigo-400 font-mono text-[11px]">
+        <span className="studio-field-name font-medium text-gray-200 font-mono">{field.name}</span>
+        <span className="studio-field-type text-indigo-400 font-mono text-[11px]">
           {formatAvdlType(field.type)}
         </span>
         {field.default !== undefined && (
@@ -172,9 +110,11 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
         )}
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="studio-field-links flex items-center gap-2 shrink-0">
         {/* Link / Unlink Controls */}
-        {linkedPartner ? (
+        {displayStatus === 'moved' && linkedPartner ? (
+          <span className="studio-move-destination">✦ MOVES TO {linkedPartner.recordName.toUpperCase()}</span>
+        ) : linkedPartner ? (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 shadow-xs">
             <LinkIcon className="w-2.5 h-2.5" />
             <span className="max-w-[80px] truncate" title={`Linked to ${linkedPartner.recordName}.${linkedPartner.fieldName}`}>
@@ -218,7 +158,9 @@ const DraggableFieldRow: React.FC<DraggableFieldRowProps> = ({
           )
         )}
 
-        {renderBadge(diffStatus)}
+        {displayStatus !== 'identical' && (
+          <span className="studio-status-badge">{displayStatus === 'moved' ? 'MOVED' : fieldStatusLabel(diffStatus)}</span>
+        )}
       </div>
     </div>
   );
@@ -261,21 +203,8 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto p-4 space-y-6">
-      {/* Protocol Header */}
-      <div className="border-b border-gray-800 pb-3">
-        <div className="flex items-center gap-2 text-xs text-indigo-400 font-mono uppercase tracking-wider">
-          <span>Protocol</span>
-        </div>
-        <h2 className="text-lg font-bold text-gray-100">{protocol.protocol}</h2>
-        {protocol.namespace && (
-          <p className="text-xs text-gray-400 font-mono mt-0.5">{protocol.namespace}</p>
-        )}
-        {protocol.doc && <p className="text-xs text-gray-400 mt-2 italic">{protocol.doc}</p>}
-      </div>
-
-      {/* Record list */}
-      <div className="space-y-6">
+    <div className="studio-schema-viewer flex flex-col h-full overflow-y-auto">
+      <div className="studio-record-list">
         {protocol.types.map((typeDef) => {
           if (!isRecordType(typeDef)) {
             return (
@@ -296,23 +225,25 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({
           return (
             <div
               key={record.name}
-              className="bg-gray-900/90 border border-gray-800 rounded-xl overflow-hidden shadow-sm"
+              className="studio-record-card bg-gray-900/90 border border-gray-800 rounded-xl overflow-hidden shadow-sm"
             >
               {/* Record Banner */}
-              <div className="bg-gray-800/80 px-4 py-2.5 border-b border-gray-800 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
-                  <span className="font-semibold text-sm text-gray-200 truncate">{record.name}</span>
-                  <span className="text-xs text-gray-500 font-mono shrink-0">
+              <div className="studio-record-header bg-gray-800/80 px-4 py-2.5 border-b border-gray-800 flex items-center justify-between gap-2">
+                <div className="studio-record-heading flex items-center gap-2 min-w-0">
+                  <span className="studio-record-kind">record</span>
+                  <span className="studio-record-name font-semibold text-sm text-gray-200 truncate">{record.name}</span>
+                  <span className="studio-record-count text-xs text-gray-500 font-mono shrink-0">
                     ({record.fields.length} {record.fields.length === 1 ? 'field' : 'fields'})
                   </span>
-                  {record.namespace && (
-                    <span className="text-[11px] text-gray-500 font-mono truncate hidden sm:inline">{record.namespace}</span>
+                  {(record.namespace || protocol.namespace) && (
+                    <span className="studio-record-namespace text-[11px] text-gray-500 font-mono truncate hidden sm:inline">
+                      ns: {record.namespace || protocol.namespace}
+                    </span>
                   )}
                 </div>
 
                 {/* Record Linking & Copy Controls */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="studio-record-actions flex items-center gap-2 shrink-0">
                   {/* Record Link Status Pill / Link selector */}
                   {linkedEditedRecordName ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-indigo-950/90 text-indigo-300 border border-indigo-700/60 shadow-xs">
@@ -392,7 +323,7 @@ export const SchemaViewer: React.FC<SchemaViewerProps> = ({
               </div>
 
               {/* Fields Table */}
-              <div className="divide-y divide-gray-800/60">
+              <div className="studio-field-list divide-y divide-gray-800/60">
                 {record.fields.map((field: AvroField) => {
                   const diffStatus = annotations?.get(field.id);
                   const linkedPartner = partnerFieldsMap?.get(field.id);

@@ -91,7 +91,12 @@ export function areTypesEqual(a: AvroSchemaType, b: AvroSchemaType): boolean {
 
 interface FieldLocation {
   recordName: string;
+  namespace?: string;
   field: AvroField;
+}
+
+function effectiveNamespace(record: AvroRecordType, protocol: AvroProtocol): string {
+  return record.namespace || protocol.namespace || '';
 }
 
 /**
@@ -123,9 +128,10 @@ export function computeDiff(
         for (const field of type.fields) {
           origFields.set(field.id, {
             recordName: type.name,
+            namespace: effectiveNamespace(type, original),
             field,
           });
-          const key = `${type.name.toLowerCase()}.${field.name.toLowerCase()}`;
+          const key = `${effectiveNamespace(type, original).toLowerCase()}.${type.name.toLowerCase()}.${field.name.toLowerCase()}`;
           if (!origByRecordField.has(key)) {
             origByRecordField.set(key, field.id);
           }
@@ -141,6 +147,7 @@ export function computeDiff(
         for (const field of type.fields) {
           editedFields.set(field.id, {
             recordName: type.name,
+            namespace: effectiveNamespace(type, edited),
             field,
           });
         }
@@ -173,7 +180,7 @@ export function computeDiff(
     } else {
       // 3. Fallback: match by canonical record.field name
       const effectiveOrigRecordName = recMap.get(editedLoc.recordName) || editedLoc.recordName;
-      const semanticKey = `${effectiveOrigRecordName.toLowerCase()}.${editedLoc.field.name.toLowerCase()}`;
+      const semanticKey = `${editedLoc.namespace?.toLowerCase() || ''}.${effectiveOrigRecordName.toLowerCase()}.${editedLoc.field.name.toLowerCase()}`;
       const candidateOrigId = origByRecordField.get(semanticKey);
       if (candidateOrigId && !matchedOrigIds.has(candidateOrigId)) {
         targetOrigId = candidateOrigId;
@@ -192,7 +199,8 @@ export function computeDiff(
 
     // Check if record matches (either same name or mapped via recordLinks)
     const effectiveOrigRecordName = recMap.get(editedLoc.recordName) || editedLoc.recordName;
-    const sameRecord = origLoc.recordName.toLowerCase() === effectiveOrigRecordName.toLowerCase();
+    const sameRecord = origLoc.recordName.toLowerCase() === effectiveOrigRecordName.toLowerCase()
+      && (origLoc.namespace || '').toLowerCase() === (editedLoc.namespace || '').toLowerCase();
     const sameName = origLoc.field.name.toLowerCase() === editedLoc.field.name.toLowerCase();
     const sameType = areTypesEqual(origLoc.field.type, editedLoc.field.type);
 
@@ -207,12 +215,12 @@ export function computeDiff(
     } else if (!sameRecord && sameName && sameType) {
       status = 'moved';
       movedCount++;
-    } else if (!sameRecord && !sameName && sameType) {
-      status = 'moved-renamed';
+    } else if (!sameRecord) {
+      // A cross-record move stays MOVED even when its name/type also differs.
+      status = 'moved';
       movedCount++;
-      renamedCount++;
     } else {
-      // Type changed
+      // Any non-move metadata/type change is presented as MODIFIED.
       status = 'type-changed';
       modifiedCount++;
       if (!sameName) renamedCount++;

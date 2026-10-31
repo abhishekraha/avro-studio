@@ -9,7 +9,8 @@ import type { LinkType } from '../../../core/types/linkage';
 import { isRecordType } from '../../../core/types/schema';
 import { SortableField } from './SortableField';
 import type { LinkedPartnerInfo } from '../SchemaViewer';
-import { Plus, Trash2, Edit3, FolderPlus, Layers, Tag } from 'lucide-react';
+import { Plus, Trash2, Edit3, FolderPlus, Layers, Tag, RotateCcw } from 'lucide-react';
+import { displayFieldStatus } from '../fieldStatus';
 
 export interface SchemaEditorProps {
   protocol: AvroProtocol | null;
@@ -37,10 +38,12 @@ export interface SchemaEditorProps {
   onRemoveRecord: (name: string, namespace?: string) => void;
   onRenameRecord: (oldName: string, newName: string, namespace?: string) => void;
   onUpdateRecordNamespace?: (recordName: string, newNamespace: string, currentNamespace?: string) => void;
+  onReset?: () => void;
 }
 
 interface DroppableRecordCardProps {
   record: AvroRecordType;
+  defaultNamespace?: string;
   availableNamedTypes: string[];
   annotations?: Map<string, LinkType | 'unchanged'>;
   partnerFieldsMap?: Map<string, LinkedPartnerInfo>;
@@ -67,6 +70,7 @@ interface DroppableRecordCardProps {
 
 const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
   record,
+  defaultNamespace,
   availableNamedTypes,
   annotations,
   partnerFieldsMap,
@@ -91,18 +95,18 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
   handleCreateField,
 }) => {
   const [isEditingNs, setIsEditingNs] = useState(false);
-  const [nsInput, setNsInput] = useState(record.namespace || '');
+  const [nsInput, setNsInput] = useState(record.namespace || defaultNamespace || '');
 
   React.useEffect(() => {
-    setNsInput(record.namespace || '');
-  }, [record.namespace]);
+    setNsInput(record.namespace || defaultNamespace || '');
+  }, [record.namespace, defaultNamespace]);
 
   const handleNsSubmit = () => {
     setIsEditingNs(false);
     if (onUpdateRecordNamespace && nsInput.trim() !== (record.namespace || '')) {
       onUpdateRecordNamespace(record.name, nsInput.trim(), record.namespace);
     } else {
-      setNsInput(record.namespace || '');
+      setNsInput(record.namespace || defaultNamespace || '');
     }
   };
 
@@ -118,20 +122,26 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
   });
 
   const fieldIds = record.fields.map((f) => f.id);
+  const fieldStatuses = record.fields.map((field) => displayFieldStatus(annotations?.get(field.id)));
+  const changedFieldCount = fieldStatuses.filter((status) => status !== 'identical').length;
+  const isRestructured = fieldStatuses.includes('moved') || fieldStatuses.includes('added');
 
   return (
     <div
       ref={setNodeRef}
-      className={`bg-gray-900/90 border rounded-xl overflow-hidden shadow-sm transition ${
+      className={`studio-record-card bg-gray-900/90 border rounded-xl overflow-hidden shadow-sm transition ${
         isOver
           ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-gray-900'
           : 'border-gray-800'
       }`}
     >
       {/* Record Header */}
-      <div className="bg-gray-800/80 px-4 py-2.5 border-b border-gray-800 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-sm text-gray-200">{record.name}</span>
+      <div className="studio-record-header bg-gray-800/80 px-4 py-2.5 border-b border-gray-800 flex items-center justify-between">
+        <div className="studio-record-heading flex items-center gap-2">
+          <span className="studio-record-kind is-editable">record</span>
+          <span className="studio-record-name font-semibold text-sm text-gray-200">{record.name}</span>
+
+          {isRestructured && <span className="studio-restructured-badge">★ NEW RESTRUCTURED</span>}
 
           {/* Editable record namespace input badge */}
           {isEditingNs ? (
@@ -157,7 +167,7 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
               className="text-[11px] font-mono text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 px-1.5 py-0.5 rounded transition"
               title="Click to edit record namespace"
             >
-              {record.namespace || 'add namespace'}
+              {record.namespace || defaultNamespace ? 'ns: ' + (record.namespace || defaultNamespace) : 'add namespace'}
             </button>
           )}
 
@@ -171,7 +181,11 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="studio-record-status-and-actions flex items-center gap-2">
+          {changedFieldCount > 0
+            ? <span className="studio-record-status">MODIFIED ({changedFieldCount})</span>
+            : <span className="studio-record-status is-clean">UNMODIFIED</span>}
+          <div className="studio-record-actions flex items-center gap-2">
           <button
             onClick={() => {
               const newName = window.prompt('Rename record to:', record.name);
@@ -191,11 +205,12 @@ const DroppableRecordCard: React.FC<DroppableRecordCardProps> = ({
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
+          </div>
         </div>
       </div>
 
       {/* Sortable Field List */}
-      <div className="p-3 space-y-2">
+      <div className="studio-field-list p-3 space-y-2">
         <SortableContext items={fieldIds} strategy={verticalListSortingStrategy}>
           {record.fields.map((field) => {
             const linkedPartner = partnerFieldsMap?.get(field.id);
@@ -337,6 +352,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   onRemoveRecord,
   onRenameRecord,
   onUpdateRecordNamespace,
+  onReset,
 }) => {
   const [newRecordName, setNewRecordName] = useState('');
   const [newRecordNamespace, setNewRecordNamespace] = useState('');
@@ -367,45 +383,26 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   }, [protocol?.protocol, protocol?.namespace]);
 
   const bumpVersion = (type: 'major' | 'minor' | 'patch') => {
-    const semverRegex = /^v?(\d+)\.(\d+)\.(\d+)(.*)$/;
-    const match = (schemaVersion || '1.0.0').match(semverRegex);
-    let major = 1, minor = 0, patch = 0;
-    if (match) {
-      major = parseInt(match[1], 10);
-      minor = parseInt(match[2], 10);
-      patch = parseInt(match[3], 10);
-    }
-    if (type === 'major') {
-      major += 1;
-      minor = 0;
-      patch = 0;
-    } else if (type === 'minor') {
-      minor += 1;
-      patch = 0;
-    } else if (type === 'patch') {
-      patch += 1;
-    }
-    const newVer = `${major}.${minor}.${patch}`;
-    setVersionInput(newVer);
-    onUpdateSchemaVersion?.(newVer);
+    const parts = (schemaVersion || '1.0.0').replace(/^v/i, '').split('.').map((part) => parseInt(part, 10) || 0);
+    while (parts.length < 3) parts.push(0);
+    if (type === 'major') { parts[0] += 1; parts[1] = 0; parts[2] = 0; }
+    else if (type === 'minor') { parts[1] += 1; parts[2] = 0; }
+    else parts[2] += 1;
+    const nextVersion = parts.slice(0, 3).join('.');
+    setVersionInput(nextVersion);
+    onUpdateSchemaVersion?.(nextVersion);
   };
 
   const handleVersionSubmit = () => {
     setIsEditingVersion(false);
-    if (versionInput.trim() && versionInput !== schemaVersion) {
-      onUpdateSchemaVersion?.(versionInput.trim());
-    } else {
-      setVersionInput(schemaVersion);
-    }
+    if (versionInput.trim() && versionInput !== schemaVersion) onUpdateSchemaVersion?.(versionInput.trim());
+    else setVersionInput(schemaVersion);
   };
 
   const handleWsNameSubmit = () => {
     setIsEditingWsName(false);
-    if (wsNameInput.trim() && wsNameInput !== workspaceName && onRenameWorkspace) {
-      onRenameWorkspace(wsNameInput.trim());
-    } else {
-      setWsNameInput(workspaceName || '');
-    }
+    if (wsNameInput.trim() && wsNameInput !== workspaceName) onRenameWorkspace?.(wsNameInput.trim());
+    else setWsNameInput(workspaceName || '');
   };
 
   const handleProtocolNameSubmit = () => {
@@ -457,9 +454,53 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto p-4 space-y-6">
+    <div className="studio-schema-editor">
+      <div className="studio-editor-heading">
+        <div className="studio-editor-title-block">
+          <div className="studio-editor-title-line"><h2>Working Copy (Editable)</h2><span className="studio-live-badge">LIVE DRAFT</span>
+            {onReset && (
+              <button
+                onClick={onReset}
+                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-gray-400 hover:text-rose-400 bg-gray-800/80 hover:bg-rose-950/40 border border-gray-700 hover:border-rose-700/60 rounded-md transition shadow-xs ml-2"
+                title="Reset all changes back to original (Ctrl+Z to undo)"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
+          <div className="studio-editor-contract-meta">
+            {isEditingProtocolName ? (
+              <input value={protocolNameInput} autoFocus onChange={(event) => setProtocolNameInput(event.target.value)}
+                onBlur={handleProtocolNameSubmit} onKeyDown={(event) => {
+                  if (event.key === 'Enter') handleProtocolNameSubmit();
+                  if (event.key === 'Escape') { setProtocolNameInput(protocol.protocol); setIsEditingProtocolName(false); }
+                }} aria-label="Protocol name" />
+            ) : <button onClick={() => setIsEditingProtocolName(true)} title="Rename protocol">{protocol.protocol}</button>}
+            <span>/</span>
+            {isEditingNamespace ? (
+              <input value={namespaceInput} autoFocus onChange={(event) => setNamespaceInput(event.target.value)}
+                onBlur={handleNamespaceSubmit} onKeyDown={(event) => {
+                  if (event.key === 'Enter') handleNamespaceSubmit();
+                  if (event.key === 'Escape') { setNamespaceInput(protocol.namespace || ''); setIsEditingNamespace(false); }
+                }} aria-label="Protocol namespace" />
+            ) : <button onClick={() => setIsEditingNamespace(true)} title="Edit protocol namespace">{protocol.namespace || '(no namespace)'}</button>}
+          </div>
+        </div>
+        {!isAddingRecord ? (
+          <button onClick={() => setIsAddingRecord(true)} className="studio-add-record-button"><FolderPlus size={14} /><span>Add Record</span></button>
+        ) : (
+          <div className="studio-add-record-form">
+            <input placeholder="Record name..." value={newRecordName} autoFocus onChange={(event) => setNewRecordName(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') handleCreateRecord(); if (event.key === 'Escape') setIsAddingRecord(false); }} />
+            <input placeholder="Namespace..." value={newRecordNamespace} onChange={(event) => setNewRecordNamespace(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') handleCreateRecord(); if (event.key === 'Escape') setIsAddingRecord(false); }} />
+            <button onClick={handleCreateRecord}>Add</button><button onClick={() => setIsAddingRecord(false)}>Cancel</button>
+          </div>
+        )}
+      </div>
       {/* Header / Protocol & Working Copy Controls */}
-      <div className="flex flex-col gap-3 border-b border-gray-800 pb-4">
+      <div className="studio-old-editor-controls flex flex-col gap-3 border-b border-gray-800 pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="px-2 py-0.5 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 rounded uppercase tracking-wider">
@@ -661,7 +702,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
       </div>
 
       {/* Record list with droppable cards */}
-      <div className="space-y-6">
+      <div className="studio-record-list">
         {protocol.types.map((typeDef) => {
           if (!isRecordType(typeDef)) return null;
           const record = typeDef as AvroRecordType;
@@ -671,6 +712,7 @@ export const SchemaEditor: React.FC<SchemaEditorProps> = ({
             <DroppableRecordCard
               key={recordKey}
               record={record}
+              defaultNamespace={protocol.namespace}
               availableNamedTypes={availableNamedTypes}
               annotations={annotations}
               partnerFieldsMap={partnerFieldsMap}

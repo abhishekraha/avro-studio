@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -108,7 +108,7 @@ export function App() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
 
   const { userId, setUserId, isInitialized } = useUserIdentity();
-  const { saveWorkspace, loadWorkspace, fetchWorkspaces } = useWorkspaces();
+  const { saveWorkspace, loadWorkspace } = useWorkspaces();
 
   // On mount or user initialization, load the last active workspace from server or localStorage
   useEffect(() => {
@@ -369,7 +369,7 @@ export function App() {
       for (const t of origProto.types) {
         if (isRecordType(t)) {
           for (const f of t.fields) {
-            origByRecordField.set(`${t.name.toLowerCase()}.${f.name.toLowerCase()}`, {
+            origByRecordField.set(`${(t.namespace || origProto.namespace || '').toLowerCase()}.${t.name.toLowerCase()}.${f.name.toLowerCase()}`, {
               id: f.id,
               name: f.name,
               recordName: t.name,
@@ -405,7 +405,7 @@ export function App() {
         if (isRecordType(editType)) {
           for (const editField of editType.fields) {
             if (!editMap.has(editField.id)) {
-              const semanticKey = `${editType.name.toLowerCase()}.${editField.name.toLowerCase()}`;
+              const semanticKey = `${(editType.namespace || editProto.namespace || '').toLowerCase()}.${editType.name.toLowerCase()}.${editField.name.toLowerCase()}`;
               const origMatch = origByRecordField.get(semanticKey);
               if (origMatch && !origMap.has(origMatch.id)) {
                 origMap.set(origMatch.id, {
@@ -470,12 +470,29 @@ export function App() {
       const pairKey = `${originalFieldId}::${editedFieldId}`;
       if (!seen.has(pairKey)) {
         seen.add(pairKey);
+        const locateField = (protocol: AvroProtocol, fieldId: string) => {
+          for (const type of protocol.types) {
+            if (!isRecordType(type)) continue;
+            const field = type.fields.find((item) => item.id === fieldId);
+            if (field) return { recordName: type.name, fieldName: field.name, namespace: type.namespace || protocol.namespace || '' };
+          }
+          return undefined;
+        };
+        const source = locateField(origProto, originalFieldId);
+        const target = locateField(editProto, editedFieldId);
         list.push({
           originalFieldId,
           editedFieldId,
           origElementId: `field-orig-${originalFieldId}`,
           editElementId: `field-edit-${editedFieldId}`,
           isManual: true,
+          isCrossRecord: !!source && !!target && source.recordName !== target.recordName,
+          originalRecordName: source?.recordName,
+          editedRecordName: target?.recordName,
+          originalFieldName: source?.fieldName,
+          editedFieldName: target?.fieldName,
+          originalNamespace: source?.namespace,
+          editedNamespace: target?.namespace,
         });
       }
     }
@@ -501,7 +518,7 @@ export function App() {
       for (const t of origProto.types) {
         if (isRecordType(t)) {
           for (const f of t.fields) {
-            origByRecordField.set(`${t.name.toLowerCase()}.${f.name.toLowerCase()}`, f.id);
+            origByRecordField.set(`${(t.namespace || origProto.namespace || '').toLowerCase()}.${t.name.toLowerCase()}.${f.name.toLowerCase()}`, f.id);
           }
         }
       }
@@ -529,7 +546,7 @@ export function App() {
               }
             } else if (!manualEditedIds.has(f.id)) {
               // Check canonical record.field match
-              const origId = origByRecordField.get(`${t.name.toLowerCase()}.${f.name.toLowerCase()}`);
+              const origId = origByRecordField.get(`${(t.namespace || editProto.namespace || '').toLowerCase()}.${t.name.toLowerCase()}.${f.name.toLowerCase()}`);
               if (origId && !manualOrigIds.has(origId)) {
                 const pairKey = `${origId}::${f.id}`;
                 if (!seen.has(pairKey)) {
@@ -578,6 +595,19 @@ export function App() {
     const parts = selectedConnectionId.split('::');
     return parts[0] || null;
   }, [selectedConnectionId]);
+
+  const selectedCrossRecordConnection = useMemo(() =>
+    connections.find((connection) =>
+      connection.isCrossRecord && `${connection.originalFieldId}::${connection.editedFieldId}` === selectedConnectionId
+    ), [connections, selectedConnectionId]);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedConnectionId(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, []);
 
   // Linking actions
   const handleStartLinking = useCallback((fieldId: string, isOriginal: boolean) => {
@@ -1063,7 +1093,7 @@ export function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-950 text-gray-100 overflow-hidden font-sans">
+    <div className="studio-shell">
       {/* Header Bar */}
       <Header
         workspaceName={workspace.name}
@@ -1099,42 +1129,13 @@ export function App() {
         onAddContract={handleAddContract}
         onRenameContract={handleRenameContract}
         onRemoveContract={handleRemoveContract}
+        protocolNamespace={schemaState.original?.namespace || schemaState.edited?.namespace || ''}
+        activeLinkCount={connections.length}
       />
-
-      {/* Diff Stats Banner */}
-      <div className="h-8 bg-gray-900/60 border-b border-gray-800/80 px-4 flex items-center justify-between text-xs select-none">
-        <div className="flex items-center gap-4 text-gray-400">
-          <span className="font-semibold text-gray-300">Live Diff:</span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-            <span>+{diffResult.stats.addedCount} added</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
-            <span>-{diffResult.stats.deletedCount} deleted</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-sky-500 inline-block" />
-            <span>~{diffResult.stats.movedCount} moved</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" />
-            <span>~{diffResult.stats.renamedCount} renamed</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-            <span>~{diffResult.stats.modifiedCount} type changes</span>
-          </span>
-        </div>
-
-        <div className="text-[11px] text-gray-500 font-mono">
-          {schemaState.isDirty ? '● Unsaved changes' : '✓ Up to date'}
-        </div>
-      </div>
 
       {/* Dual-Pane or Full Create Workspace wrapped in top-level DndContext */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <main ref={studioContainerRef} className="flex-1 flex overflow-hidden relative">
+        <main ref={studioContainerRef} className={'studio-main ' + (viewMode === 'create' ? 'studio-main-create' : 'studio-main-compare') + (selectedCrossRecordConnection ? ' studio-main-move-selected' : '')}>
           {/* Connecting lines overlay (only active in Compare & Edit mode) */}
           {viewMode === 'compare' && (
             <SchemaConnectionOverlay
@@ -1144,38 +1145,44 @@ export function App() {
               containerRef={studioContainerRef}
             />
           )}
+          {selectedCrossRecordConnection && (
+            <aside className="studio-cross-record-detail" onClick={(event) => event.stopPropagation()}>
+              <div className="studio-cross-record-detail-title">● &nbsp;CROSS-RECORD LINK DETECTED</div>
+              <div><strong>Source:</strong> {selectedCrossRecordConnection.originalNamespace}.{selectedCrossRecordConnection.originalRecordName}.{selectedCrossRecordConnection.originalFieldName}</div>
+              <div><strong>Target:</strong> {selectedCrossRecordConnection.editedNamespace}.{selectedCrossRecordConnection.editedRecordName}.{selectedCrossRecordConnection.editedFieldName}</div>
+              <hr />
+              <p>Field restructured across record boundaries.</p>
+              <p>Bi-directional lineage preserved for reconciliation.</p>
+              <button type="button" onClick={() => setSelectedConnectionId(null)}>Close</button>
+            </aside>
+          )}
 
           {/* Left Pane: Read-only Original Schema (Compare mode only) */}
           {viewMode === 'compare' && (
-            <section className="w-1/2 border-r border-gray-800 bg-gray-950/40 flex flex-col overflow-hidden">
+            <section className="studio-pane studio-pane-original">
+              <div className="studio-pane-heading">
+                <div className="studio-pane-title">
+                  <h2>Original Protocol</h2>
+                  <span className="studio-readonly-badge">READ-ONLY</span>
+                </div>
+                <span className="studio-pane-count">{schemaState.original?.types.filter(isRecordType).length || 0} Records</span>
+              </div>
+              <div className="studio-pane-body">
               <SchemaViewer
                 protocol={schemaState.original}
                 annotations={diffResult.originalAnnotations}
                 recordLinks={activeContract?.recordLinks}
                 partnerFieldsMap={origPartnerMap}
-                availableEditedRecordNames={
-                  schemaState.edited?.types
-                    ? schemaState.edited.types.filter(isRecordType).map((r) => r.name)
-                    : []
-                }
-                linkingFieldId={linkingState?.fieldId}
                 selectedFieldId={activeSelectedFieldId}
                 onSelectField={handleSelectField}
-                onStartLinking={handleStartLinking}
-                onLinkField={handleLinkField}
-                onUnlink={handleUnlink}
-                onCopyRecord={handleCopyRecord}
-                onLinkRecord={handleLinkRecord}
-                onUnlinkRecord={handleUnlinkRecord}
               />
+              </div>
             </section>
           )}
 
           {/* Right/Full Pane: Interactive Drag-and-Drop Editor */}
           <section
-            className={`${
-              viewMode === 'create' ? 'w-full max-w-5xl mx-auto border-x border-gray-800 shadow-2xl' : 'w-1/2'
-            } bg-gray-950 flex flex-col overflow-hidden`}
+            className={viewMode === 'create' ? 'studio-pane studio-pane-working studio-create-pane' : 'studio-pane studio-pane-working'}
           >
             <SchemaEditor
               protocol={schemaState.edited}
@@ -1210,10 +1217,30 @@ export function App() {
               onRemoveRecord={schemaState.removeRecord}
               onRenameRecord={schemaState.renameRecord}
               onUpdateRecordNamespace={schemaState.updateRecordNamespace}
+              onReset={() => {
+                // Reset edited protocol back to original
+                schemaState.reset();
+                // Clear manual links, record links on active contract
+                setWorkspace((prev) => {
+                  const contracts = prev.contracts.map((c) =>
+                    c.id === prev.activeContractId
+                      ? { ...c, manualLinks: [], recordLinks: [] }
+                      : c
+                  );
+                  return { ...prev, contracts };
+                });
+                // Clear linking mode
+                setLinkingState(null);
+              }}
             />
           </section>
         </main>
       </DndContext>
+
+      <footer className="studio-footer">
+        Shortcuts: <kbd>Ctrl+Z</kbd> Undo <kbd>Ctrl+Y</kbd> Redo <kbd>Esc</kbd> Close Modals
+        <span className="studio-footer-note">Avro Studio Rebuild &bull; Production Ready</span>
+      </footer>
 
       {/* Modals */}
       <BigQueryExportModal

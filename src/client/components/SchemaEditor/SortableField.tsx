@@ -7,6 +7,7 @@ import type { LinkType } from '../../../core/types/linkage';
 import { PRIMITIVE_TYPES } from '../../../core/types/schema';
 import { formatAvdlType } from '../../../core/serializer/avdlSerializer';
 import type { LinkedPartnerInfo } from '../SchemaViewer';
+import { displayFieldStatus, fieldStatusLabel } from '../fieldStatus';
 
 export interface SortableFieldProps {
   recordName: string;
@@ -95,42 +96,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
 
   const currentTypeString = formatAvdlType(field.type);
 
-  const renderBadge = () => {
-    switch (diffStatus) {
-      case 'added':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-            added
-          </span>
-        );
-      case 'moved':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-sky-950 text-sky-400 border border-sky-800">
-            moved-in
-          </span>
-        );
-      case 'moved-renamed':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-purple-950 text-purple-400 border border-purple-800">
-            moved-renamed
-          </span>
-        );
-      case 'type-changed':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-amber-950 text-amber-400 border border-amber-800">
-            type-changed
-          </span>
-        );
-      case 'renamed':
-        return (
-          <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-indigo-950 text-indigo-400 border border-indigo-800">
-            renamed
-          </span>
-        );
-      default:
-        return null;
-    }
-  };
+  const displayStatus = displayFieldStatus(diffStatus);
 
   return (
     <div
@@ -138,13 +104,15 @@ export const SortableField: React.FC<SortableFieldProps> = ({
       id={`field-edit-${field.id}`}
       style={style}
       onClick={onSelect}
-      className={`group px-3 py-2 flex items-center justify-between text-xs bg-gray-900 border transition shadow-sm cursor-pointer ${
+      data-status={displayStatus}
+      className={`studio-field-row group px-3 py-2 flex items-center justify-between text-xs bg-gray-900 border transition shadow-sm cursor-pointer ${
         isSelected
           ? 'border-emerald-400 bg-gray-850 ring-1 ring-emerald-400/80 shadow-md'
           : 'border-gray-800/80 hover:border-gray-700'
       } rounded-lg ${isDragging ? 'shadow-lg border-indigo-500' : ''}`}
     >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="studio-field-main flex items-center gap-2 flex-1 min-w-0">
+        <span className="studio-field-dot" aria-hidden="true" />
         {/* Drag Handle */}
         <button
           {...attributes}
@@ -156,7 +124,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
         </button>
 
         {/* Stable synthetic ID pill */}
-        <span className="text-[10px] text-gray-500 font-mono select-none px-1 py-0.5 bg-gray-800/60 rounded">
+        <span className="studio-field-id text-[10px] text-gray-500 font-mono select-none px-1 py-0.5 bg-gray-800/60 rounded">
           {field.id}
         </span>
 
@@ -208,7 +176,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
           </div>
         ) : (
           <div className="flex items-center gap-1 group/name">
-            <span className="font-mono font-medium text-gray-200">{field.name}</span>
+            <span className="studio-field-name font-mono font-medium text-gray-200">{field.name}</span>
             <button
               onClick={() => setIsEditingName(true)}
               className="opacity-0 group-hover/name:opacity-100 p-0.5 text-gray-500 hover:text-gray-300 transition"
@@ -223,7 +191,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
         <select
           value={currentTypeString}
           onChange={(e) => onUpdateType(e.target.value as PrimitiveType)}
-          className="bg-gray-800 text-indigo-400 font-mono text-[11px] px-2 py-0.5 rounded border border-gray-700 hover:border-gray-600 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          className="studio-field-type bg-gray-800 text-indigo-400 font-mono text-[11px] px-2 py-0.5 rounded border border-gray-700 hover:border-gray-600 focus:outline-none focus:border-indigo-500 cursor-pointer"
         >
           <optgroup label="Primitives">
             {PRIMITIVE_TYPES.map((pt) => (
@@ -244,7 +212,12 @@ export const SortableField: React.FC<SortableFieldProps> = ({
         </select>
 
         {/* Link / Unlink Controls */}
-        {linkedPartner ? (
+        {displayStatus === 'moved' && linkedPartner ? (
+          <>
+            <span className="studio-cross-record-badge">↔ CROSS-RECORD MOVE</span>
+            <span className="studio-status-badge">MOVED</span>
+          </>
+        ) : linkedPartner ? (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 shadow-xs">
             <LinkIcon className="w-2.5 h-2.5" />
             <span className="max-w-[80px] truncate" title={`Linked to ${linkedPartner.recordName}.${linkedPartner.fieldName}`}>
@@ -289,7 +262,7 @@ export const SortableField: React.FC<SortableFieldProps> = ({
         )}
 
         {/* Diff badge */}
-        {renderBadge()}
+        {!linkedPartner || displayStatus !== 'moved' ? <span className="studio-status-badge">{fieldStatusLabel(diffStatus)}</span> : null}
       </div>
 
       {/* Actions */}

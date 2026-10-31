@@ -4,8 +4,6 @@ A modern, high-performance web studio for viewing, editing, diffing, and reconci
 
 Designed for data platform engineers, analytics engineers, and backend developers who need visual schema authoring, migration tracking, BigQuery DDL/JSON generation, and automated data reconciliation.
 
-![Avro Studio Dual-Pane Interface](docs/assets/app-preview.svg)
-
 > **Documentation & GitHub Pages**: Visit the interactive documentation site at [`docs/index.html`](docs/index.html).
 
 ---
@@ -13,11 +11,12 @@ Designed for data platform engineers, analytics engineers, and backend developer
 ## Key Features
 
 - **Visual Schema Authoring & Dual-Pane Editor**: Edit records, fields, types, documentation, and annotations side-by-side with instant live updates.
-- **Cross-Record Field Movement & Linking**: Move and link fields across different records (e.g. reparenting `customerId` or `status` from `Order` to `OrderSummary` or `Shipment`) with vivid glowing SVG bezier curves and automated migration lineage tracking.
+- **Cross-Record Field Movement & Linking**: Move and link fields across different records (e.g. reparenting `customerId` or `status` from `Order` to `OrderSummary` or `Shipment`) with SVG bezier curves, triangular arrowheads, and automated migration lineage tracking.
 - **Multi-Contract Workspaces**: Maintain multiple interrelated schema files in a single tabbed workspace session with persistent draft state.
 - **Semantic Versioning & Namespaces**: Quick-bump schema versions (`+Patch`, `+Minor`, `+Major`) and maintain namespace isolation per record to avoid microservice naming collisions.
+- **Reset to Original**: One-click reset restores the working copy to match the original schema exactly (including all metadata, links, and namespace). Ctrl+Z undoes the reset.
 - **Bi-directional AVDL & Avro JSON Parsing/Serialization**: Full support for protocols, records, enums, fixed types, arrays, maps, and unions.
-- **Intelligent Schema Diff Engine**: Identifies identical, added, deleted, renamed, moved, and modified fields between original and edited schemas.
+- **Intelligent Schema Diff Engine**: Identifies identical, added, deleted, renamed, moved, and modified fields between original and edited schemas. Rename/type-change highlighting (yellow) takes precedence over move (blue).
 - **BigQuery Schema Generator**: Translates Avro primitive, logical (`timestamp-millis`, `decimal`), enum, fixed, array, and nested record types into production-grade BigQuery schema definitions.
 - **Tabular Data Reconciliation**: Automated data reconciliation running key-based comparisons between source and target datasets using schema linkages.
 - **Schema Registry Proxy & SQLite Persistence**: Multi-workspace state persistence with WAL mode, revision snapshots, and CORS-bypassing Schema Registry proxy.
@@ -30,19 +29,19 @@ Designed for data platform engineers, analytics engineers, and backend developer
 Avro Studio presents a dual-pane workspace designed for safe, audit-compliant schema refactoring:
 
 1. **Left Pane ("Original Protocol")**: Represents the immutable baseline contract imported from Confluent/Karapace Schema Registry, local `.avdl`, or Avro JSON (`.avsc`).
-2. **Right Pane ("Working Copy")**: An interactive draft where fields can be added, modified, reordered via drag-and-drop, or re-parented across records.
-3. **SVG Connection Overlay**: Renders dynamic cubic bezier curves between matching fields. Identical fields render in green, modified/renamed fields in blue, and cross-record moved fields in high-visibility glowing neon gradients.
+2. **Right Pane ("Working Copy")**: An interactive draft where fields can be added, modified, reordered via drag-and-drop, or re-parented across records. A **Reset** button restores the working copy to match the original exactly.
+3. **SVG Connection Overlay**: Renders dynamic cubic bezier curves with triangular arrowheads between matching fields. Connections use color-coded gradients per status (green for identical, yellow for renamed/type-changed, blue for moved). Selected connections highlight with a black line and yellow glow, showing a detailed cross-record link tooltip.
 
 ```
        Original Protocol (Registry)                 Working Copy (Editable Draft)
 ┌────────────────────────────────────────┐       ┌────────────────────────────────────────┐
 │ record Order {                         │       │ record Order {                         │
-│   string orderId;                      ├───────┼─► string orderId;                      │
-│   string customerId;                   ├───┐   │   double totalAmount; (renamed)        │
+│   string orderId;                      ├──►────┼─► string orderId;                      │
+│   string customerId;                   ├──►┐   │   double totalAmount; (renamed)        │
 │   double orderTotal;                   │   │   │   OrderStatus status; (modified)       │
 │   string status;                       │   │   │ }                                      │
 │ }                                      │   │   │                                        │
-│                                        │   └───┼─► record OrderSummary {                │
+│                                        │   └►──┼─► record OrderSummary {                │
 │ record Payment {                       │       │     string summaryId; (+added)         │
 │   string paymentId;                    │       │  ★  string customerId; (CROSS-RECORD)  │
 │   double amount;                       │       │     int itemCount;                     │
@@ -58,7 +57,7 @@ Avro Studio features comprehensive keyboard shortcuts for fast, non-disruptive e
 
 | Shortcut | Action | Description |
 | :--- | :--- | :--- |
-| `Ctrl + Z` / `⌘ + Z` | **Undo** | Reverts the previous field mutation, type update, or reorder |
+| `Ctrl + Z` / `⌘ + Z` | **Undo** | Reverts the previous field mutation, type update, reorder, or reset |
 | `Ctrl + Y` / `⌘ + Y` | **Redo** | Re-applies the reverted state change |
 | `Ctrl + Shift + Z` / `⌘ + Shift + Z` | **Redo (Alt)** | Alternative cross-platform redo shortcut |
 | `Escape` (`Esc`) | **Close Modals** | Dismisses any active modal (BigQuery, Recon, Linkages, Previews) |
@@ -130,7 +129,7 @@ The production Hono backend exposes clean REST endpoints:
 ### Installation
 
 ```bash
-git clone https://github.com/example/avro-studio.git
+git clone https://github.com/abhishekraha/avro-studio.git
 cd avro-studio
 npm install
 ```
