@@ -5,3 +5,4 @@
 - Always create and switch to a `feature/*` branch (e.g. `feature/my-feature-name`).
 - Always push feature branches to remote (`git push -u origin feature/...`), never `master`.
 - Merging to `master` is only performed via Pull Request.
+- **Pull Request Requirement**: Whenever creating a Pull Request, **ALWAYS include a detailed, comprehensive summary of what has changed**, covering new features, visual/styling adjustments, bug fixes, and architecture/doc modifications.
