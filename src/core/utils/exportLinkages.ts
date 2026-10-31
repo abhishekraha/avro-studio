@@ -25,7 +25,20 @@ function normalizePairMap(
 
 interface FieldMeta {
   recordName: string;
+  namespace?: string;
   field: AvroField;
+}
+
+function endpoint(recordName: string, namespace: string | undefined, field: AvroField): LinkageEndpoint {
+  const effectiveNamespace = namespace || '';
+  return {
+    namespace: effectiveNamespace || undefined,
+    recordName,
+    fieldName: field.name,
+    identityKey: `${effectiveNamespace}.${recordName}.${field.name}`.toLowerCase(),
+    cleanType: formatAvdlType(field.type),
+    id: field.id,
+  };
 }
 
 /**
@@ -45,7 +58,7 @@ export function buildLinkageExport(
     for (const t of original.types) {
       if (isRecordType(t)) {
         for (const f of t.fields) {
-          origFields.set(f.id, { recordName: t.name, field: f });
+          origFields.set(f.id, { recordName: t.name, namespace: t.namespace || original.namespace, field: f });
         }
       }
     }
@@ -56,7 +69,7 @@ export function buildLinkageExport(
     for (const t of edited.types) {
       if (isRecordType(t)) {
         for (const f of t.fields) {
-          editedFields.set(f.id, { recordName: t.name, field: f });
+          editedFields.set(f.id, { recordName: t.name, namespace: t.namespace || edited.namespace, field: f });
         }
       }
     }
@@ -75,12 +88,7 @@ export function buildLinkageExport(
       targetOrigId = editedId;
     }
 
-    const editedEndpoint: LinkageEndpoint = {
-      recordName: editedLoc.recordName,
-      fieldName: editedLoc.field.name,
-      cleanType: formatAvdlType(editedLoc.field.type),
-      id: editedId,
-    };
+    const editedEndpoint = endpoint(editedLoc.recordName, editedLoc.namespace, editedLoc.field);
 
     if (!targetOrigId || !origFields.has(targetOrigId)) {
       // Added field
@@ -95,15 +103,10 @@ export function buildLinkageExport(
     const origLoc = origFields.get(targetOrigId)!;
     matchedOrigIds.add(targetOrigId);
 
-    const origEndpoint: LinkageEndpoint = {
-      recordName: origLoc.recordName,
-      fieldName: origLoc.field.name,
-      cleanType: formatAvdlType(origLoc.field.type),
-      id: targetOrigId,
-    };
+    const origEndpoint = endpoint(origLoc.recordName, origLoc.namespace, origLoc.field);
 
     const effectiveOrigRecordName = recMap.get(editedLoc.recordName) || editedLoc.recordName;
-    const sameRecord = origLoc.recordName === effectiveOrigRecordName;
+    const sameRecord = origLoc.recordName === effectiveOrigRecordName && (origLoc.namespace || '') === (editedLoc.namespace || '');
     const sameName = origLoc.field.name === editedLoc.field.name;
     const sameType = areTypesEqual(origLoc.field.type, editedLoc.field.type);
 
@@ -114,8 +117,8 @@ export function buildLinkageExport(
       linkType = 'renamed';
     } else if (!sameRecord && sameName && sameType) {
       linkType = 'moved';
-    } else if (!sameRecord && !sameName && sameType) {
-      linkType = 'moved-renamed';
+    } else if (!sameRecord) {
+      linkType = 'moved';
     } else {
       linkType = 'type-changed';
     }
@@ -134,12 +137,7 @@ export function buildLinkageExport(
       linkages.push({
         linkType: 'deleted',
         linkSource: 'auto',
-        original: {
-          recordName: origLoc.recordName,
-          fieldName: origLoc.field.name,
-          cleanType: formatAvdlType(origLoc.field.type),
-          id: origId,
-        },
+        original: endpoint(origLoc.recordName, origLoc.namespace, origLoc.field),
       });
     }
   }

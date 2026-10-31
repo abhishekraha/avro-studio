@@ -9,6 +9,8 @@ export interface ContractTabBarProps {
   onAddContract: (name: string) => void;
   onRenameContract: (id: string, name: string) => void;
   onRemoveContract: (id: string) => void;
+  protocolNamespace?: string;
+  activeLinkCount?: number;
 }
 
 export const ContractTabBar: React.FC<ContractTabBarProps> = ({
@@ -18,6 +20,8 @@ export const ContractTabBar: React.FC<ContractTabBarProps> = ({
   onAddContract,
   onRenameContract,
   onRemoveContract,
+  protocolNamespace = '',
+  activeLinkCount = 0,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState<string>('');
@@ -95,8 +99,8 @@ export const ContractTabBar: React.FC<ContractTabBarProps> = ({
   };
 
   return (
-    <div className="h-10 bg-gray-900/90 border-b border-gray-800 flex items-center px-3 gap-1 overflow-x-auto select-none scrollbar-thin">
-      <div className="flex items-center gap-1 min-w-0">
+    <div className="studio-tabs">
+      <div className="studio-tab-list">
         {contracts.map((contract) => {
           const isActive = contract.id === activeContractId;
           const isCurrentlyEditing = editingId === contract.id;
@@ -107,7 +111,7 @@ export const ContractTabBar: React.FC<ContractTabBarProps> = ({
               data-active={isActive ? 'true' : 'false'}
               onClick={() => onSelectContract(contract.id)}
               onDoubleClick={(e) => startEditing(contract, e)}
-              className={`group relative flex items-center gap-2 h-7 px-3 rounded-t text-xs font-medium cursor-pointer transition-colors border-t border-l border-r ${
+              className={`studio-contract-tab group relative flex items-center gap-2 text-xs font-medium cursor-pointer transition-colors border-t border-l border-r ${
                 isActive
                   ? 'bg-gray-950 text-indigo-400 border-gray-700/80 shadow-sm'
                   : 'bg-gray-900/60 text-gray-400 border-transparent hover:bg-gray-800/80 hover:text-gray-200'
@@ -217,13 +221,17 @@ export const ContractTabBar: React.FC<ContractTabBarProps> = ({
         <button
           type="button"
           onClick={startAdding}
-          className="flex items-center gap-1 px-2.5 py-1 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded transition-colors ml-1"
+          className="studio-new-contract flex items-center gap-1 px-2.5 py-1 text-xs"
           title="Add new contract"
         >
           <Plus className="w-3.5 h-3.5 text-indigo-400" />
           <span>New Contract</span>
         </button>
       )}
+      <div className="studio-tab-meta">
+        <span>Protocol: <strong>{protocolNamespace || '—'}</strong></span>
+        <span className="studio-link-count">{activeLinkCount} Active Links</span>
+      </div>
     </div>
   );
 };

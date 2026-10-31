@@ -19,8 +19,11 @@ export type LinkSource = 'auto' | 'manual';
  * Schema field reference endpoint within a linkage relationship.
  */
 export interface LinkageEndpoint {
+  namespace?: string;
   recordName: string;
   fieldName: string;
+  /** Lowercase namespace.record.field identity used for comparison/export. */
+  identityKey?: string;
   cleanType: string;
   id: string;
 }

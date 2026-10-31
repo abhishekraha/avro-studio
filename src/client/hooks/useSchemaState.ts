@@ -886,10 +886,14 @@ export function useSchemaState(options: SchemaStateOptions = {}): UseSchemaState
 
   const reset = useCallback(() => {
     if (original) {
-      setHistory([structuredClone(original)]);
-      setHistoryIndex(0);
+      // Push original as a new history entry so Ctrl+Z can undo the reset
+      setHistory((prevHistory) => {
+        const truncated = prevHistory.slice(0, historyIndex + 1);
+        return [...truncated, structuredClone(original)];
+      });
+      setHistoryIndex((prev) => prev + 1);
     }
-  }, [original]);
+  }, [original, historyIndex]);
 
   return {
     original,
